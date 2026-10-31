@@ -1,0 +1,16 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+
+# Local Runtime Caches, Databases & Locks
+.instance.lock
+.thumbnail_cache/
+storage_cache.json
+history.json
+app_crash.log
+
+# Temporary files
+*.tmp
+*.~tmp

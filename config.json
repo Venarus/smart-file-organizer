@@ -1,0 +1,43 @@
+{
+    "sources": [
+        "C:\\Users\\senem\\Desktop",
+        "C:\\Users\\senem\\Downloads",
+        "C:\\Users\\senem\\Documents",
+        "C:\\Users\\senem\\Pictures",
+        "C:\\Users\\senem\\Music",
+        "C:\\Users\\senem\\Videos"
+    ],
+    "target": "C:\\Users\\senem\\Desktop\\Folders",
+    "auto_watch": true,
+    "check_interval": 10,
+    "allow_new_categories": true,
+    "start_with_windows": true,
+    "minimize_to_tray_on_close": true,
+    "desktop_baseline": [
+        "itch.lnk",
+        "Akıllı Klasör Düzenleyici.lnk",
+        "Proteus 8 Professional 8.4 SP0 Build 21079.exe",
+        "Medya ve Videolar",
+        "Claude.lnk",
+        "CurseForge.lnk",
+        "Antigravity",
+        "NEXUS File Intelligence.lnk",
+        "Denetim Masası - Kısayol.lnk",
+        "Yazılım ve Araçlar",
+        "WizTree.lnk",
+        "İndirilenler ve Arşivler",
+        "GitHub Desktop.lnk",
+        "Opera GX tarayıcı.lnk",
+        "Bu bilgisayar - Kısayol.lnk",
+        "Antigravity.lnk",
+        "Modrinth App.lnk",
+        "Spotify.lnk",
+        "Folders",
+        "desktop.ini",
+        "Deadlock.url",
+        "Discord.lnk",
+        "SONORA Studio.lnk"
+    ],
+    "theme_mode": "dark",
+    "notifications_enabled": true
+}
