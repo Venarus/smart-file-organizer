@@ -4,6 +4,13 @@ __pycache__/
 *$py.class
 *.log
 
+# PyInstaller builds & releases
+build/
+dist/
+*.spec
+*.zip
+RELEASE_NOTES.md
+
 # Local Runtime Caches, Databases & Locks
 .instance.lock
 .thumbnail_cache/
