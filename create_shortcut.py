@@ -1,9 +1,12 @@
 import os
+import sys
 import subprocess
 
 desktop = os.path.join(os.path.expanduser('~'), 'Desktop')
-app_dir = r'C:\Users\senem\.gemini\antigravity\scratch\FolderOrganizerApp'
-pythonw_path = r'C:\Program Files\Python315\pythonw.exe'
+app_dir = os.path.dirname(os.path.abspath(__file__))
+python_exe = sys.executable
+pythonw_candidate = python_exe.replace('python.exe', 'pythonw.exe')
+pythonw_path = pythonw_candidate if os.path.exists(pythonw_candidate) else python_exe
 
 # 1. Eski kısayolları temizle
 for f in os.listdir(desktop):

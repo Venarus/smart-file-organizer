@@ -143,7 +143,7 @@ class SettingsView(ctk.CTkFrame):
         inner_ab.pack(fill="x", padx=16, pady=14)
 
         ctk.CTkLabel(inner_ab, text="Smart File Organizer V2", font=ctk.CTkFont(size=14, weight="bold"), text_color=c('text_primary')).pack(anchor="w")
-        ctk.CTkLabel(inner_ab, text="Windows 11 Fluent Design System • AI File Intelligence Engine\nVersiyon 2.0.0 — Senem Özel Derleme", font=ctk.CTkFont(size=11), text_color=c('text_muted')).pack(anchor="w", pady=(2, 0))
+        ctk.CTkLabel(inner_ab, text="Windows 11 Fluent Design System • AI File Intelligence Engine\nVersiyon 2.0.0 — Stable Release", font=ctk.CTkFont(size=11), text_color=c('text_muted')).pack(anchor="w", pady=(2, 0))
 
     def _on_theme_select(self, val):
         mode = 'light' if 'Açık' in val else 'dark'

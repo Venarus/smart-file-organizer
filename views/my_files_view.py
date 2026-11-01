@@ -100,7 +100,7 @@ class MyFilesView(ctk.CTkFrame):
             text_color=c('text_primary')
         ).pack(side="left")
 
-        user_home = os.environ.get('USERPROFILE', r'C:\Users\senem')
+        user_home = os.environ.get('USERPROFILE', os.path.expanduser('~'))
         quick_folders = [
             ("🖥️ Masaüstü", os.path.join(user_home, "Desktop")),
             ("📥 İndirilenler", os.path.join(user_home, "Downloads")),

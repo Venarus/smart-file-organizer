@@ -155,11 +155,13 @@ class AIFileIntelligence:
         cls._analysis_cache.clear()
 
     @classmethod
-    def analyze(cls, file_path, target_base_folder=r'c:\Users\senem\Desktop\Folders', allow_new_categories=True):
+    def analyze(cls, file_path, target_base_folder=None, allow_new_categories=True):
         """
         Dosyayı çok boyutlu yapay zeka analizinden geçirir.
         Önbellekleme sayesinde aynı dosya için ardışık analizler 0.0001 ms hızında tamamlanır.
         """
+        if not target_base_folder:
+            target_base_folder = os.path.join(os.path.expanduser('~'), 'Desktop', 'Folders')
         stat_key = None
         if os.path.exists(file_path):
             try:
@@ -180,7 +182,9 @@ class AIFileIntelligence:
         return result
 
     @classmethod
-    def _analyze_uncached(cls, file_path, target_base_folder=r'c:\Users\senem\Desktop\Folders', allow_new_categories=True):
+    def _analyze_uncached(cls, file_path, target_base_folder=None, allow_new_categories=True):
+        if not target_base_folder:
+            target_base_folder = os.path.join(os.path.expanduser('~'), 'Desktop', 'Folders')
         file_name = os.path.basename(file_path)
         lower_name = file_name.lower()
         base_name, ext = os.path.splitext(lower_name)

@@ -82,8 +82,11 @@ def save_config(cfg):
 
 def set_windows_startup(enable):
     """Windows Başlangıç klasörüne kısayol ekler veya kaldırır."""
+    import sys
     startup_dir = os.path.join(os.environ.get('APPDATA', ''), r'Microsoft\Windows\Start Menu\Programs\Startup')
-    pythonw_path = r'C:\Program Files\Python315\pythonw.exe'
+    python_exe = sys.executable
+    pythonw_candidate = python_exe.replace('python.exe', 'pythonw.exe')
+    pythonw_path = pythonw_candidate if os.path.exists(pythonw_candidate) else python_exe
     app_script = os.path.join(APP_DIR, 'app.py')
     ico_path = os.path.join(APP_DIR, 'app_icon.ico')
     shortcut_path = os.path.join(startup_dir, 'AkilliKlasorDuzenleyici.lnk')

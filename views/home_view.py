@@ -173,7 +173,7 @@ class HomeView(ctk.CTkFrame):
         qa_chips_box = ctk.CTkFrame(qa_inner, fg_color="transparent")
         qa_chips_box.pack(fill="x")
 
-        user_home = os.environ.get('USERPROFILE', r'C:\Users\senem')
+        user_home = os.environ.get('USERPROFILE', os.path.expanduser('~'))
         quick_folders = [
             ("🖥️ Masaüstü", os.path.join(user_home, "Desktop")),
             ("📥 İndirilenler", os.path.join(user_home, "Downloads")),

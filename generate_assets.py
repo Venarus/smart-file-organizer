@@ -7,7 +7,7 @@ and UI mockups using PIL and native Windows Segoe UI typography.
 import os
 from PIL import Image, ImageDraw, ImageFont
 
-ASSETS_DIR = r"C:\Users\senem\.gemini\antigravity\scratch\FolderOrganizerApp\assets"
+ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
 os.makedirs(ASSETS_DIR, exist_ok=True)
 
 FONTS_DIR = os.path.join(os.environ.get('SYSTEMROOT', 'C:\\Windows'), 'Fonts')
