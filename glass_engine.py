@@ -13,6 +13,7 @@ Provides:
 
 import ctypes
 from ctypes import wintypes
+import tkinter as tk
 from PIL import Image, ImageDraw, ImageFilter
 import customtkinter as ctk
 
@@ -181,7 +182,7 @@ class GlassArtEngine:
         Dashboard ve ana ekranlar için yumuşak bulanıklaştırılmış (Gaussian Blur)
         Aurora Cam (Cyan + Elektrik Moru + Gece Mavisi) arka plan görüntüsü üretir.
         """
-        key = ("hero", width, height, theme_mode, variant)
+        key = (id(tk._default_root), "hero", width, height, theme_mode, variant)
         if key in cls._cache:
             return cls._cache[key]
 
@@ -245,7 +246,7 @@ class GlassArtEngine:
     @classmethod
     def get_glass_orb(cls, size: int = 42, color_hex: str = "#38BDF8", theme_mode: str = 'dark') -> ctk.CTkImage:
         """İstatistik ve kategori kartları için parlak yarı-saydam cam küre (orb) arka planı üretir."""
-        key = ("orb", size, color_hex, theme_mode)
+        key = (id(tk._default_root), "orb", size, color_hex, theme_mode)
         if key in cls._cache:
             return cls._cache[key]
 

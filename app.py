@@ -136,8 +136,8 @@ class SmartFileOrganizerApp(ctk.CTk):
         self._start_single_instance_listener()
 
         # Ana Cam Düzenini Oluştur
-        self._preload_pinned_icons()
         self._build_layout()
+        self._preload_pinned_icons_async()
 
         # Sürükle-Bırak Desteği
         if HAS_WINDND:
@@ -248,22 +248,42 @@ class SmartFileOrganizerApp(ctk.CTk):
 
         threading.Thread(target=_listen, daemon=True).start()
 
-    def _preload_pinned_icons(self):
+    def _preload_pinned_icons_async(self):
         folder_map = {
-            'qf_desktop': DEFAULT_DESKTOP,
-            'qf_downloads': DEFAULT_DOWNLOADS,
-            'qf_documents': DEFAULT_DOCUMENTS,
-            'qf_pictures': DEFAULT_PICTURES,
-            'qf_music': DEFAULT_MUSIC,
-            'qf_videos': DEFAULT_VIDEOS,
+            'qf_desktop': (DEFAULT_DESKTOP, 'Masaüstü 📌'),
+            'qf_downloads': (DEFAULT_DOWNLOADS, 'İndirilenler 📌'),
+            'qf_documents': (DEFAULT_DOCUMENTS, 'Belgeler 📌'),
+            'qf_pictures': (DEFAULT_PICTURES, 'Resimler 📌'),
+            'qf_music': (DEFAULT_MUSIC, 'Müzikler 📌'),
+            'qf_videos': (DEFAULT_VIDEOS, 'Videolar 📌'),
         }
-        for key, path in folder_map.items():
-            try:
-                pil_img = ThumbnailEngine._extract_shell_image(path, 20, 20)
-                if pil_img:
-                    self._pinned_icons[key] = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(18, 18))
-            except Exception:
-                pass
+
+        def _worker():
+            loaded = {}
+            for key, (path, label) in folder_map.items():
+                try:
+                    pil_img = ThumbnailEngine._extract_shell_image(path, 20, 20)
+                    if pil_img:
+                        loaded[key] = (pil_img, label)
+                except Exception:
+                    pass
+            if not loaded:
+                return
+
+            def _apply_icons():
+                for key, (pil_img, label) in loaded.items():
+                    try:
+                        ctk_ic = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(18, 18))
+                        self._pinned_icons[key] = ctk_ic
+                        btn = self.nav_buttons.get(key)
+                        if btn and btn.winfo_exists():
+                            btn.configure(image=ctk_ic, text=f"  {label}", compound="left")
+                    except Exception:
+                        pass
+
+            UIBridge.post(_apply_icons)
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _resolve_theme(self, pref):
         if pref == 'light':
@@ -766,36 +786,53 @@ class SmartFileOrganizerApp(ctk.CTk):
 
     def navigate_to(self, page_id):
         """
-        Sayfalar arası önbellekli (flicker-free) geçiş sağlar,
-        aktif cam kenar çubuğu göstergesini ve üst breadcrumb başlığını günceller.
+        Sayfalar arası önbellekli (flicker-free) ve O(1) diferansiyel geçiş sağlar.
+        Yalnızca değişen 2 kenar çubuğu düğmesini günceller ve paylaşımlı font önbelleğini kullanır.
         """
-        c = lambda token: FluentTheme.c(token, self.theme_mode)
         self._close_overlays()
 
+        if page_id == self.current_page_id and self.current_view is not None:
+            return
+
+        c = lambda token: FluentTheme.c(token, self.theme_mode)
+        prev_page_id = self.current_page_id
         self.current_page_id = page_id
+
+        # Önceki sayfada devam eden parçalı liste çizimi varsa iptal et
+        FluidAnimator.cancel_chunk_render()
 
         if hasattr(self, 'lbl_breadcrumb') and self.lbl_breadcrumb.winfo_exists():
             title_str = PAGE_TITLES.get(page_id, page_id.upper())
             self.lbl_breadcrumb.configure(text=f"GLASS WORKSPACE  ›  {title_str}")
 
-        for pid, btn in self.nav_buttons.items():
-            ind = self.nav_indicators.get(pid)
-            if pid == page_id:
-                btn.configure(
-                    fg_color=c('bg_card_active'),
-                    text_color=c('accent_light'),
-                    font=ctk.CTkFont(size=12, weight="bold")
-                )
-                if ind:
-                    ind.configure(fg_color=c('nav_indicator'))
-            else:
-                btn.configure(
+        # Yalnızca önceki aktif düğmeyi ve yeni aktif düğmeyi güncelle (18 düğme döngüsü yerine 2 düğme!)
+        if prev_page_id and prev_page_id in self.nav_buttons:
+            prev_btn = self.nav_buttons[prev_page_id]
+            prev_ind = self.nav_indicators.get(prev_page_id)
+            try:
+                prev_btn.configure(
                     fg_color="transparent",
                     text_color=c('text_secondary'),
-                    font=ctk.CTkFont(size=12, weight="normal")
+                    font=FluentTheme.font(size=12, weight="normal")
                 )
-                if ind:
-                    ind.configure(fg_color="transparent")
+                if prev_ind:
+                    prev_ind.configure(fg_color="transparent")
+            except Exception:
+                pass
+
+        if page_id in self.nav_buttons:
+            new_btn = self.nav_buttons[page_id]
+            new_ind = self.nav_indicators.get(page_id)
+            try:
+                new_btn.configure(
+                    fg_color=c('bg_card_active'),
+                    text_color=c('accent_light'),
+                    font=FluentTheme.font(size=12, weight="bold")
+                )
+                if new_ind:
+                    new_ind.configure(fg_color=c('nav_indicator'))
+            except Exception:
+                pass
 
         if self.current_view is not None:
             try:
@@ -803,7 +840,9 @@ class SmartFileOrganizerApp(ctk.CTk):
             except Exception:
                 pass
 
+        is_first_visit = False
         if page_id not in self._view_cache or not self._view_cache[page_id].winfo_exists():
+            is_first_visit = True
             view_map = {
                 'qf_desktop': lambda: QuickFolderView(self.content_container, self, 'desktop'),
                 'qf_downloads': lambda: QuickFolderView(self.content_container, self, 'downloads'),
@@ -830,7 +869,7 @@ class SmartFileOrganizerApp(ctk.CTk):
         self.current_view = self._view_cache[page_id]
         self.current_view.pack(fill="both", expand=True)
 
-        if hasattr(self.current_view, 'on_page_show'):
+        if not is_first_visit and hasattr(self.current_view, 'on_page_show'):
             try:
                 self.current_view.on_page_show()
             except Exception:

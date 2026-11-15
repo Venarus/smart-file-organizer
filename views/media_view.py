@@ -18,6 +18,8 @@ from animation import FluidAnimator, UIBridge
 from notification_center import FluentContextMenu
 
 class MediaGalleryView(ctk.CTkFrame):
+    PAGE_SIZE = 18
+
     def __init__(self, master, app_controller):
         super().__init__(master, fg_color="transparent")
         self.app = app_controller
@@ -25,6 +27,7 @@ class MediaGalleryView(ctk.CTkFrame):
 
         self.current_filter = "Tümü"
         self.all_media_files = []
+        self._display_limit = self.PAGE_SIZE
         self._is_loading = False
 
         self._build_ui()
@@ -152,13 +155,21 @@ class MediaGalleryView(ctk.CTkFrame):
         self.scroll_area.grid_columnconfigure((0, 1, 2), weight=1, uniform="media_col")
 
     def _set_filter(self, filter_key):
+        if filter_key == self.current_filter:
+            return
         c = lambda token: FluentTheme.c(token, self.theme_mode)
+        f = FluentTheme.font
         self.current_filter = filter_key
+        self._display_limit = self.PAGE_SIZE
         for k, btn in self.filter_buttons.items():
             if k == filter_key:
-                btn.configure(fg_color=c('accent'), text_color="#FFFFFF", font=ctk.CTkFont(size=11, weight="bold"))
+                btn.configure(fg_color=c('accent'), text_color="#FFFFFF", font=f(11, "bold"))
             else:
-                btn.configure(fg_color=c('bg_card'), text_color=c('text_primary'), font=ctk.CTkFont(size=11, weight="normal"))
+                btn.configure(fg_color=c('bg_card'), text_color=c('text_primary'), font=f(11, "normal"))
+        self._render_grid()
+
+    def _load_more(self):
+        self._display_limit += self.PAGE_SIZE
         self._render_grid()
 
     def _open_media_folder(self):
@@ -217,17 +228,25 @@ class MediaGalleryView(ctk.CTkFrame):
         threading.Thread(target=worker, daemon=True).start()
 
     def _render_grid(self):
+        try:
+            if not self.scroll_area.winfo_exists():
+                return
+        except Exception:
+            return
+
         c = lambda token: FluentTheme.c(token, self.theme_mode)
+        f = FluentTheme.font
+        FluidAnimator.cancel_chunk_render(self.scroll_area)
         for w in self.scroll_area.winfo_children():
             w.destroy()
 
         # Filtreleme
         if self.current_filter == "video":
-            items = [f for f in self.all_media_files if f['is_video']]
+            items = [x for x in self.all_media_files if x['is_video']]
         elif self.current_filter == "image":
-            items = [f for f in self.all_media_files if not f['is_video'] and not f['is_gif']]
+            items = [x for x in self.all_media_files if not x['is_video'] and not x['is_gif']]
         elif self.current_filter == "gif":
-            items = [f for f in self.all_media_files if f['is_gif']]
+            items = [x for x in self.all_media_files if x['is_gif']]
         else:
             items = self.all_media_files
 
@@ -237,18 +256,44 @@ class MediaGalleryView(ctk.CTkFrame):
             ctk.CTkLabel(
                 self.scroll_area,
                 text="Bu filtreye uygun medya dosyası bulunamadı.\nFolders içerisine video veya fotoğraf ekleyebilirsiniz.",
-                font=ctk.CTkFont(size=13),
+                font=f(13),
                 text_color=c('text_muted'),
                 justify="center"
             ).grid(row=0, column=0, columnspan=3, pady=60)
             return
 
-        # Grid oluşturma (3 Sütun)
-        max_items = items[:48]  # İlk 48 ögeyi hızlıca çiz
-        for idx, item in enumerate(max_items):
+        total_items = len(items)
+        max_items = items[:self._display_limit]
+
+        def _render_one(item, idx):
             r = idx // 3
             col = idx % 3
             self._create_media_card(self.scroll_area, item, r, col, c)
+
+        def _on_done():
+            if total_items > self._display_limit and self.scroll_area.winfo_exists():
+                next_row = (len(max_items) // 3) + 1
+                ctk.CTkButton(
+                    self.scroll_area,
+                    text=f"Daha Fazla Göster (+{total_items - self._display_limit} medya)",
+                    font=f(12, "bold"),
+                    fg_color=c('bg_card'),
+                    hover_color=c('bg_card_hover'),
+                    text_color=c('accent_light'),
+                    height=34,
+                    corner_radius=8,
+                    command=self._load_more
+                ).grid(row=next_row, column=0, columnspan=3, pady=12)
+
+        FluidAnimator.render_chunked(
+            self.scroll_area,
+            max_items,
+            _render_one,
+            initial_batch=6,
+            chunk_size=6,
+            interval_ms=8,
+            on_complete=_on_done
+        )
 
     def _create_media_card(self, parent, item, r, col, c):
         card = ctk.CTkFrame(

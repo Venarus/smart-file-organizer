@@ -15,21 +15,46 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 HISTORY_FILE = os.path.join(APP_DIR, 'history.json')
 
 class SecurityBackupEngine:
-    @staticmethod
-    def _load_ledger():
-        if not os.path.exists(HISTORY_FILE):
-            return []
-        try:
-            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception:
-            return []
+    _ledger_cache = None
+    _last_mtime = -1.0
+    _revision = 0
 
-    @staticmethod
-    def _save_ledger(ledger):
+    @classmethod
+    def get_revision(cls) -> int:
+        """İşlem defterinin değişiklik revizyon numarasını döndürür (O(1) hızlı önbellek kontrolü)."""
+        cls._load_ledger()
+        return cls._revision
+
+    @classmethod
+    def _load_ledger(cls):
+        if not os.path.exists(HISTORY_FILE):
+            if cls._ledger_cache is None or cls._ledger_cache:
+                cls._ledger_cache = []
+                cls._last_mtime = -1.0
+                cls._revision += 1
+            return cls._ledger_cache
         try:
+            mtime = os.path.getmtime(HISTORY_FILE)
+            if cls._ledger_cache is not None and mtime == cls._last_mtime:
+                return cls._ledger_cache
+            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+                cls._ledger_cache = json.load(f)
+            cls._last_mtime = mtime
+            cls._revision += 1
+            return cls._ledger_cache
+        except Exception:
+            if cls._ledger_cache is None:
+                cls._ledger_cache = []
+            return cls._ledger_cache
+
+    @classmethod
+    def _save_ledger(cls, ledger):
+        try:
+            cls._ledger_cache = list(ledger)
             with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
                 json.dump(ledger, f, indent=2, ensure_ascii=False)
+            cls._last_mtime = os.path.getmtime(HISTORY_FILE)
+            cls._revision += 1
         except Exception as e:
             print(f"Geçmiş kaydetme hatası: {e}")
 

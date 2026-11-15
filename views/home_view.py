@@ -12,6 +12,7 @@ Features:
 """
 
 import os
+import time
 import threading
 from datetime import datetime
 import customtkinter as ctk
@@ -31,6 +32,10 @@ class HomeView(ctk.CTkFrame):
         self.app = app_controller
         self.theme_mode = self.app.theme_mode
         self._is_loading_stats = False
+        self._is_updating_pending = False
+        self._last_pending_ts = 0.0
+        self._rendered_ledger_rev = -1
+        self._rendered_storage_id = None
         self._prev_files = 0
         self._prev_organized = 0
         self._prev_pending = 0
@@ -39,6 +44,8 @@ class HomeView(ctk.CTkFrame):
 
     def update_theme(self, theme_mode):
         self.theme_mode = theme_mode
+        self._rendered_ledger_rev = -1
+        self._rendered_storage_id = None
         for widget in self.winfo_children():
             widget.destroy()
         self._build_ui()
@@ -80,54 +87,72 @@ class HomeView(ctk.CTkFrame):
         return pending
 
     def on_page_show(self):
-        """Sayfa tekrar görünür olduğunda bileşenleri silmeden canlı sayaçları ve listeleri günceller."""
+        """
+        Sayfa tekrar görünür olduğunda yalnızca veri revizyonu değişmişse
+        bileşenleri günceller; veri değişmediyse 0.1 ms içinde anında döner.
+        """
         c = lambda token: FluentTheme.c(token, self.theme_mode)
-        summary = self._get_activity_summary()
-        new_organized = summary.get('total', 0)
+        cur_rev = SecurityBackupEngine.get_revision()
 
-        if hasattr(self, 'lbl_organized_files') and self.lbl_organized_files.winfo_exists():
-            FluidAnimator.animate_counter(
-                self.lbl_organized_files,
-                self._prev_organized,
-                new_organized,
-                duration_ms=FluidAnimator.TIMING_COMPLEX
-            )
-            self._prev_organized = new_organized
+        if cur_rev != self._rendered_ledger_rev:
+            summary = self._get_activity_summary()
+            new_organized = summary.get('total', 0)
 
-        if hasattr(self, 'lbl_organized_sub') and self.lbl_organized_sub.winfo_exists():
-            self.lbl_organized_sub.configure(text=f"Bugün: {summary.get('today', 0)} dosya düzenlendi")
+            if hasattr(self, 'lbl_organized_files') and self.lbl_organized_files.winfo_exists():
+                FluidAnimator.animate_counter(
+                    self.lbl_organized_files,
+                    self._prev_organized,
+                    new_organized,
+                    duration_ms=FluidAnimator.TIMING_COMPLEX
+                )
+                self._prev_organized = new_organized
+
+            if hasattr(self, 'lbl_organized_sub') and self.lbl_organized_sub.winfo_exists():
+                self.lbl_organized_sub.configure(text=f"Bugün: {summary.get('today', 0)} dosya düzenlendi")
+
+            if hasattr(self, 'recent_container') and self.recent_container.winfo_exists():
+                self._populate_recent_list(c)
+            self._rendered_ledger_rev = cur_rev
 
         target_base = self.app.cfg.get('target', '')
         cached_storage = StorageAnalyzer._cache.get(target_base)
-        if cached_storage:
-            self._apply_storage_stats(cached_storage)
+        if cached_storage is not None:
+            if id(cached_storage) != self._rendered_storage_id:
+                self._apply_storage_stats(cached_storage)
         elif not self._is_loading_stats:
             self._is_loading_stats = True
             threading.Thread(target=self._async_load_stats, args=(target_base,), daemon=True).start()
 
-        # Bekleyen dosyaları arka planda say
-        threading.Thread(target=self._async_update_pending, daemon=True).start()
-
-        if hasattr(self, 'recent_container') and self.recent_container.winfo_exists():
-            self._populate_recent_list(c)
+        # Bekleyen dosyaları en fazla 4 saniyede bir arka planda kontrol et
+        now = time.perf_counter()
+        if not self._is_updating_pending and (now - self._last_pending_ts) > 4.0:
+            self._is_updating_pending = True
+            self._last_pending_ts = now
+            threading.Thread(target=self._async_update_pending, daemon=True).start()
 
     def _async_update_pending(self):
-        cnt = self._count_pending_files()
+        try:
+            cnt = self._count_pending_files()
 
-        def _apply():
-            if hasattr(self, 'lbl_pending_files') and self.lbl_pending_files.winfo_exists():
-                FluidAnimator.animate_counter(
-                    self.lbl_pending_files,
-                    self._prev_pending,
-                    cnt,
-                    duration_ms=FluidAnimator.TIMING_COMPLEX
-                )
-                self._prev_pending = cnt
-            if hasattr(self, 'lbl_pending_sub') and self.lbl_pending_sub.winfo_exists():
-                status_txt = "Tüm klasörler tertemiz ✨" if cnt == 0 else f"{cnt} yeni dosya organize edilmeye hazır"
-                self.lbl_pending_sub.configure(text=status_txt)
+            def _apply():
+                if hasattr(self, 'lbl_pending_files') and self.lbl_pending_files.winfo_exists():
+                    if cnt != self._prev_pending:
+                        FluidAnimator.animate_counter(
+                            self.lbl_pending_files,
+                            self._prev_pending,
+                            cnt,
+                            duration_ms=FluidAnimator.TIMING_COMPLEX
+                        )
+                        self._prev_pending = cnt
+                    else:
+                        self.lbl_pending_files.configure(text=str(cnt))
+                if hasattr(self, 'lbl_pending_sub') and self.lbl_pending_sub.winfo_exists():
+                    status_txt = "Tüm klasörler tertemiz ✨" if cnt == 0 else f"{cnt} yeni dosya organize edilmeye hazır"
+                    self.lbl_pending_sub.configure(text=status_txt)
 
-        UIBridge.post(_apply)
+            UIBridge.post(_apply)
+        finally:
+            self._is_updating_pending = False
 
     def _build_ui(self):
         c = lambda token: FluentTheme.c(token, self.theme_mode)
@@ -419,6 +444,7 @@ class HomeView(ctk.CTkFrame):
         self.categories_box.pack(fill="both", expand=True)
 
         if cached_storage:
+            self._rendered_storage_id = id(cached_storage)
             self._populate_categories_matrix(cached_storage.get('categories', []))
         else:
             FluidAnimator.create_skeleton(self.categories_box, rows=3, row_height=42, theme_mode=self.theme_mode)
@@ -467,6 +493,7 @@ class HomeView(ctk.CTkFrame):
         self.recent_container = ctk.CTkFrame(recent_card, fg_color="transparent")
         self.recent_container.pack(fill="x", padx=16, pady=(0, 14))
         self._populate_recent_list(c)
+        self._rendered_ledger_rev = SecurityBackupEngine.get_revision()
 
         # Sağ: Hızlı Zekâ ve Yönetim Aksiyonları
         quick_card = ctk.CTkFrame(
@@ -510,6 +537,9 @@ class HomeView(ctk.CTkFrame):
 
     def _apply_storage_stats(self, data):
         try:
+            if id(data) == self._rendered_storage_id:
+                return
+            self._rendered_storage_id = id(data)
             new_files = data.get('total_files', 0)
             new_cats = len(data.get('categories', []))
             if hasattr(self, 'lbl_total_files') and self.lbl_total_files.winfo_exists():

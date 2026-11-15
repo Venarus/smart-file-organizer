@@ -5,6 +5,7 @@ Features:
 - Glowing Glass Orbs per category + animated storage utilization progress bars
 - Windows 11 Pinned Folders Quick-Jump Glass Ribbon
 - Translucent right-click context menu & smooth hover border illumination
+- Non-blocking Progressive Chunked Rendering & Shared CTkFont Cache
 """
 
 import os
@@ -25,30 +26,36 @@ class MyFilesView(ctk.CTkFrame):
         self.view_layout = "grid"  # 'grid' veya 'list'
         self.stat_labels = {}
         self._is_loading = False
+        self._applied_storage_id = None
 
         self._build_ui()
 
     def update_theme(self, theme_mode):
         self.theme_mode = theme_mode
+        self._applied_storage_id = None
         for widget in self.winfo_children():
             widget.destroy()
         self._build_ui()
 
     def on_page_show(self):
         target_base = self.app.cfg.get('target', '')
-        if target_base in StorageAnalyzer._cache:
-            self._apply_cached_stats(StorageAnalyzer._cache[target_base].get('category_map', {}))
+        cached = StorageAnalyzer._cache.get(target_base)
+        if cached is not None and id(cached) != self._applied_storage_id:
+            self._applied_storage_id = id(cached)
+            self._apply_cached_stats(cached.get('category_map', {}))
 
     def _toggle_layout(self, val):
         new_mode = "list" if "Liste" in val else "grid"
         if new_mode != self.view_layout:
             self.view_layout = new_mode
+            self._applied_storage_id = None
             for w in self.winfo_children():
                 w.destroy()
             self._build_ui()
 
     def _build_ui(self):
         c = lambda token: FluentTheme.c(token, self.theme_mode)
+        f = FluentTheme.font
         self.stat_labels.clear()
 
         # 1. Üst Cam Başlık Kartı
@@ -71,7 +78,7 @@ class MyFilesView(ctk.CTkFrame):
         ctk.CTkLabel(
             title_box,
             text="Folders Cam Gezgini (My Files)",
-            font=ctk.CTkFont(family="Segoe UI Variable Display", size=22, weight="bold"),
+            font=f(22, "bold", "Segoe UI Variable Display"),
             text_color=c('text_primary')
         ).pack(anchor="w")
 
@@ -84,7 +91,7 @@ class MyFilesView(ctk.CTkFrame):
         ctk.CTkLabel(
             title_box,
             text=sub_txt,
-            font=ctk.CTkFont(size=11),
+            font=f(11),
             text_color=c('accent_light')
         ).pack(anchor="w", pady=(2, 0))
 
@@ -94,7 +101,7 @@ class MyFilesView(ctk.CTkFrame):
         self.layout_seg = ctk.CTkSegmentedButton(
             btn_box,
             values=["⊞ Bento Grid", "☰ Liste"],
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=f(11, "bold"),
             height=32,
             selected_color=c('accent'),
             selected_hover_color=c('accent_hover'),
@@ -108,7 +115,7 @@ class MyFilesView(ctk.CTkFrame):
         ctk.CTkButton(
             btn_box,
             text="🔄 Yenile",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=f(12, "bold"),
             fg_color=c('bg_card_secondary'),
             hover_color=c('bg_card_hover'),
             text_color=c('text_primary'),
@@ -123,7 +130,7 @@ class MyFilesView(ctk.CTkFrame):
         ctk.CTkButton(
             btn_box,
             text="📂 Gezginde Aç",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=f(12, "bold"),
             fg_color=c('accent'),
             hover_color=c('accent_hover'),
             text_color="#FFFFFF",
@@ -150,7 +157,7 @@ class MyFilesView(ctk.CTkFrame):
         ctk.CTkLabel(
             qa_inner,
             text="📌 Sabitlenen Klasörler:",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=f(11, "bold"),
             text_color=c('text_secondary')
         ).pack(side="left", padx=(0, 10))
 
@@ -166,7 +173,7 @@ class MyFilesView(ctk.CTkFrame):
             ctk.CTkButton(
                 qa_inner,
                 text=f"{label_text} 📌",
-                font=ctk.CTkFont(size=11, weight="bold"),
+                font=f(11, "bold"),
                 fg_color=c('quick_access_bg'),
                 hover_color=c('quick_access_hover'),
                 text_color=c('text_primary'),
@@ -178,23 +185,23 @@ class MyFilesView(ctk.CTkFrame):
             ).pack(side="left", padx=3)
 
         # 3. Kategori Kartları Tuvali
-        scroll = ctk.CTkScrollableFrame(
+        self.scroll = ctk.CTkScrollableFrame(
             self,
             fg_color=c('bg_mica'),
             scrollbar_button_color=c('border'),
             scrollbar_button_hover_color=c('accent')
         )
-        scroll.pack(fill="both", expand=True, padx=12, pady=(0, 6))
+        self.scroll.pack(fill="both", expand=True, padx=12, pady=(0, 6))
         try:
-            scroll._parent_canvas.configure(yscrollincrement=4)
+            self.scroll._parent_canvas.configure(yscrollincrement=4)
         except Exception:
             pass
 
         if not os.path.exists(target_base):
             ctk.CTkLabel(
-                scroll,
+                self.scroll,
                 text="Hedef Folders klasörü bulunamadı.",
-                font=ctk.CTkFont(size=14),
+                font=f(14),
                 text_color=c('danger')
             ).pack(pady=40)
             return
@@ -213,41 +220,63 @@ class MyFilesView(ctk.CTkFrame):
             '11_teknik': ('📐', '#06B6D4')
         }
 
+        dir_entries = []
         try:
-            entries = sorted(os.listdir(target_base))
+            with os.scandir(target_base) as it:
+                for entry in it:
+                    if entry.is_dir() and not entry.name.startswith('.'):
+                        dir_entries.append((entry.name, entry.path))
+            dir_entries.sort(key=lambda x: x[0])
         except Exception:
-            entries = []
+            dir_entries = []
 
         is_cached = target_base in StorageAnalyzer._cache
+        if is_cached:
+            self._applied_storage_id = id(StorageAnalyzer._cache[target_base])
         category_map = StorageAnalyzer._cache[target_base].get('category_map', {}) if is_cached else {}
-
-        dir_entries = []
-        for entry in entries:
-            entry_path = os.path.join(target_base, entry)
-            if os.path.isdir(entry_path) and not entry.startswith('.'):
-                dir_entries.append((entry, entry_path))
 
         if not dir_entries:
             ctk.CTkLabel(
-                scroll,
+                self.scroll,
                 text="✨ Henüz Folders klasöründe bir kategori bulunmuyor.",
-                font=ctk.CTkFont(size=13),
+                font=f(13),
                 text_color=c('text_muted')
             ).pack(pady=40)
         elif self.view_layout == "grid":
-            grid_holder = ctk.CTkFrame(scroll, fg_color="transparent")
+            grid_holder = ctk.CTkFrame(self.scroll, fg_color="transparent")
             grid_holder.pack(fill="both", expand=True)
             grid_holder.grid_columnconfigure(0, weight=1, uniform="cat_col")
             grid_holder.grid_columnconfigure(1, weight=1, uniform="cat_col")
-            for idx, (entry, entry_path) in enumerate(dir_entries):
+
+            def _render_grid_card(item_pair, idx):
+                entry, entry_path = item_pair
                 stats = category_map.get(entry, None)
-                card = self._create_category_card(grid_holder, entry, entry_path, stats, category_meta, c)
+                card = self._create_category_card(grid_holder, entry, entry_path, stats, category_meta, c, f)
                 card.grid(row=idx // 2, column=idx % 2, sticky="nsew", padx=5, pady=5)
+
+            FluidAnimator.render_chunked(
+                grid_holder,
+                dir_entries,
+                _render_grid_card,
+                initial_batch=4,
+                chunk_size=4,
+                interval_ms=8
+            )
         else:
-            for entry, entry_path in dir_entries:
+            def _render_list_card(item_pair, _idx):
+                entry, entry_path = item_pair
                 stats = category_map.get(entry, None)
-                card = self._create_category_card(scroll, entry, entry_path, stats, category_meta, c)
+                card = self._create_category_card(self.scroll, entry, entry_path, stats, category_meta, c, f)
                 card.pack(fill="x", pady=5, padx=4)
+
+            FluidAnimator.render_chunked(
+                self.scroll,
+                dir_entries,
+                _render_list_card,
+                initial_batch=5,
+                chunk_size=5,
+                interval_ms=8
+            )
 
         if not is_cached and not self._is_loading:
             self._is_loading = True
@@ -278,14 +307,18 @@ class MyFilesView(ctk.CTkFrame):
 
     def _refresh_data(self):
         StorageAnalyzer.invalidate_cache()
+        self._applied_storage_id = None
         for w in self.winfo_children():
             w.destroy()
         self._build_ui()
 
-    def _create_category_card(self, parent, cat_name, cat_path, stats, meta_map, c):
+    def _create_category_card(self, parent, cat_name, cat_path, stats, meta_map, c, f):
+        sub_dirs = []
         try:
-            sub_items = os.listdir(cat_path)
-            sub_dirs = [d for d in sub_items if os.path.isdir(os.path.join(cat_path, d))]
+            with os.scandir(cat_path) as it:
+                for entry in it:
+                    if entry.is_dir() and not entry.name.startswith('.'):
+                        sub_dirs.append(entry.name)
         except Exception:
             sub_dirs = []
 
@@ -312,11 +345,8 @@ class MyFilesView(ctk.CTkFrame):
         )
         FluidAnimator.bind_card_hover(card, self.theme_mode)
 
-        inner = ctk.CTkFrame(card, fg_color="transparent")
-        inner.pack(fill="both", expand=True, padx=16, pady=14)
-
-        top_row = ctk.CTkFrame(inner, fg_color="transparent")
-        top_row.pack(fill="x")
+        top_row = ctk.CTkFrame(card, fg_color="transparent")
+        top_row.pack(fill="x", padx=16, pady=(14, 6))
 
         orb_img = GlassArtEngine.get_glass_orb(38, orb_col, self.theme_mode)
         ctk.CTkLabel(
@@ -324,7 +354,7 @@ class MyFilesView(ctk.CTkFrame):
             text=cat_icon,
             image=orb_img,
             compound="center",
-            font=ctk.CTkFont(size=17),
+            font=f(17),
             width=38,
             height=38
         ).pack(side="left", padx=(0, 10))
@@ -335,7 +365,7 @@ class MyFilesView(ctk.CTkFrame):
         ctk.CTkLabel(
             title_col,
             text=cat_name,
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=f(14, "bold"),
             text_color=c('text_primary'),
             anchor="w"
         ).pack(anchor="w")
@@ -343,16 +373,16 @@ class MyFilesView(ctk.CTkFrame):
         lbl_info = ctk.CTkLabel(
             title_col,
             text=info_text,
-            font=ctk.CTkFont(size=11),
+            font=f(11),
             text_color=c('accent_light'),
             anchor="w"
         )
         lbl_info.pack(anchor="w")
 
-        btn_open = ctk.CTkButton(
+        ctk.CTkButton(
             top_row,
             text="📂 Aç",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=f(11, "bold"),
             fg_color=c('bg_card_secondary'),
             hover_color=c('bg_card_hover'),
             text_color=c('text_primary'),
@@ -362,14 +392,13 @@ class MyFilesView(ctk.CTkFrame):
             height=28,
             corner_radius=7,
             command=lambda p=cat_path: os.startfile(p) if os.path.exists(p) else None
-        )
-        btn_open.pack(side="right", padx=(4, 0))
+        ).pack(side="right", padx=(4, 0))
 
         if "medya" in lower_cat or "video" in lower_cat:
             ctk.CTkButton(
                 top_row,
                 text="🎬 Galeri",
-                font=ctk.CTkFont(size=11, weight="bold"),
+                font=f(11, "bold"),
                 fg_color=c('accent'),
                 hover_color=c('accent_hover'),
                 text_color="#FFFFFF",
@@ -379,37 +408,23 @@ class MyFilesView(ctk.CTkFrame):
                 command=lambda: self.app.navigate_to('media')
             ).pack(side="right")
 
-        pbar = ctk.CTkProgressBar(inner, height=5, corner_radius=3, fg_color=c('bg_card_secondary'))
-        pbar.pack(fill="x", pady=(10, 6))
+        pbar = ctk.CTkProgressBar(card, height=5, corner_radius=3, fg_color=c('bg_card_secondary'))
+        pbar.pack(fill="x", padx=16, pady=(4, 8))
         pbar.set(pct_ratio)
         pbar.configure(progress_color=orb_col)
         self.stat_labels[cat_name] = (lbl_info, pbar)
 
         if sub_dirs:
-            pills_frame = ctk.CTkFrame(inner, fg_color="transparent")
-            pills_frame.pack(anchor="w", fill="x")
-            for sub in sub_dirs[:5]:
-                sub_p = os.path.join(cat_path, sub)
-                pill = ctk.CTkButton(
-                    pills_frame,
-                    text=f"📁 {sub}",
-                    font=ctk.CTkFont(size=10),
-                    text_color=c('text_secondary'),
-                    fg_color=c('bg_card_secondary'),
-                    hover_color=c('bg_card_hover'),
-                    height=22,
-                    width=60,
-                    corner_radius=5,
-                    command=lambda sp=sub_p: os.startfile(sp) if os.path.exists(sp) else None
-                )
-                pill.pack(side="left", padx=(0, 4), pady=1)
-            if len(sub_dirs) > 5:
-                ctk.CTkLabel(
-                    pills_frame,
-                    text=f"+{len(sub_dirs)-5}",
-                    font=ctk.CTkFont(size=10, weight="bold"),
-                    text_color=c('text_muted')
-                ).pack(side="left", padx=4)
+            preview_subs = "  •  ".join(f"📁 {s}" for s in sub_dirs[:4])
+            if len(sub_dirs) > 4:
+                preview_subs += f"  (+{len(sub_dirs) - 4})"
+            ctk.CTkLabel(
+                card,
+                text=preview_subs,
+                font=f(10),
+                text_color=c('text_secondary'),
+                anchor="w"
+            ).pack(fill="x", padx=16, pady=(0, 12))
 
         FluentContextMenu.bind_to_widget(card, cat_path, self.app)
         return card

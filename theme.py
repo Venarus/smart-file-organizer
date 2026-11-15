@@ -7,10 +7,32 @@ Provides:
 - Specular border tokens and RGB color interpolation utilities.
 """
 
+import tkinter as tk
 import customtkinter as ctk
 
 
 class FluentTheme:
+    _font_cache = {}
+
+    @classmethod
+    def font(cls, size: int = 12, weight: str = "normal", family: str = None) -> ctk.CTkFont:
+        """
+        Paylaşımlı CTkFont önbelleği (Aktif Tk root örneğine duyarlı).
+        Her bileşen için yeni Tcl font nesnesi ve ScalingTracker geri çağırımı
+        oluşturulmasını önleyerek sayfa geçişlerini ve bellek kullanımını optimize eder.
+        """
+        root_id = id(tk._default_root)
+        key = (root_id, family or "default", int(size), str(weight))
+        cached = cls._font_cache.get(key)
+        if cached is not None:
+            return cached
+        if family:
+            f = ctk.CTkFont(family=family, size=size, weight=weight)
+        else:
+            f = ctk.CTkFont(size=size, weight=weight)
+        cls._font_cache[key] = f
+        return f
+
     # Midnight Obsidian Glass Theme (Windows 11 Acrylic & High-End Glassmorphism)
     DARK = {
         'bg_primary': '#090D16',         # Derin Gece Obsidyen Tabanı (Acrylic Base)

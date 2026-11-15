@@ -129,6 +129,8 @@ class FluidAnimator:
 
     _mode_override = None  # None ise config'den okur
     _active_jobs = {}      # {(widget_id, prop_key): (widget, after_id)}
+    _chunk_jobs = {}       # {container_id: (container, after_id)}
+    _active_hover_reset = None
     _active_toasts = []    # Aktif toast bildirim pencereleri
     _last_toast_key = None
     _last_toast_time = 0.0
@@ -168,8 +170,95 @@ class FluidAnimator:
                 pass
 
     @classmethod
+    def cancel_chunk_render(cls, container=None):
+        """Devam eden parçalı (chunked) liste çizim görevlerini iptal eder."""
+        if container is not None:
+            cid = id(container)
+            entry = cls._chunk_jobs.pop(cid, None)
+            if entry:
+                w, aid = entry
+                try:
+                    if w.winfo_exists():
+                        w.after_cancel(aid)
+                except Exception:
+                    pass
+            return
+
+        for cid, (w, aid) in list(cls._chunk_jobs.items()):
+            try:
+                if w.winfo_exists():
+                    w.after_cancel(aid)
+            except Exception:
+                pass
+        cls._chunk_jobs.clear()
+
+    @classmethod
+    def render_chunked(
+        cls,
+        container,
+        items: list,
+        render_item_fn,
+        initial_batch: int = 12,
+        chunk_size: int = 12,
+        interval_ms: int = 8,
+        on_complete=None
+    ):
+        """
+        Büyük listeleri ana UI iş parçacığını (main thread) kilitlemeden çizer.
+        İlk görünür dilimi (initial_batch) anında oluşturur, kalan öğeleri ise
+        mikro-dilimler (chunk_size) halinde olay döngüsü boşta kaldıkça ekler.
+        """
+        if not container:
+            return
+        cls.cancel_chunk_render(container)
+        total = len(items)
+        if total == 0:
+            if callable(on_complete):
+                on_complete()
+            return
+
+        first_end = min(total, max(1, initial_batch))
+        for idx in range(0, first_end):
+            try:
+                if not container.winfo_exists():
+                    return
+                render_item_fn(items[idx], idx)
+            except Exception:
+                pass
+
+        if first_end >= total:
+            if callable(on_complete):
+                on_complete()
+            return
+
+        cid = id(container)
+
+        def _next_chunk(start_idx):
+            cls._chunk_jobs.pop(cid, None)
+            try:
+                if not container.winfo_exists():
+                    return
+                end_idx = min(total, start_idx + chunk_size)
+                for i in range(start_idx, end_idx):
+                    render_item_fn(items[i], i)
+                if end_idx < total:
+                    aid = container.after(interval_ms, lambda: _next_chunk(end_idx))
+                    cls._chunk_jobs[cid] = (container, aid)
+                elif callable(on_complete):
+                    on_complete()
+            except Exception:
+                pass
+
+        try:
+            aid = container.after(interval_ms, lambda: _next_chunk(first_end))
+            cls._chunk_jobs[cid] = (container, aid)
+        except Exception:
+            pass
+
+    @classmethod
     def cancel_all(cls):
         """Tüm aktif animasyon zamanlayıcılarını güvenli şekilde temizler."""
+        cls.cancel_chunk_render()
         for key, (w, after_id) in list(cls._active_jobs.items()):
             try:
                 if w.winfo_exists():
@@ -394,7 +483,7 @@ class FluidAnimator:
     ):
         """
         Kart bileşenlerine Windows 11 Fluent hover (yüzey aydınlanması ve kenarlık vurgusu)
-        mikro-etkileşimini bağlar.
+        mikro-etkileşimini sıfır gecikme ve tekil aktif kart takibi ile bağlar.
         """
         if not card_widget:
             return
@@ -406,20 +495,34 @@ class FluidAnimator:
 
         state = {'hovered': False}
 
+        def _force_reset():
+            if not state['hovered']:
+                return
+            state['hovered'] = False
+            try:
+                if card_widget.winfo_exists():
+                    card_widget.configure(fg_color=normal_bg, border_color=normal_border)
+            except Exception:
+                pass
+
         def _on_enter(_event=None):
             if state['hovered']:
                 return
+            if cls._active_hover_reset is not None and cls._active_hover_reset is not _force_reset:
+                try:
+                    cls._active_hover_reset()
+                except Exception:
+                    pass
             state['hovered'] = True
-            cls.animate_color(card_widget, 'fg_color', normal_bg, hover_bg, duration_ms=cls.TIMING_HOVER)
+            cls._active_hover_reset = _force_reset
             try:
-                card_widget.configure(border_color=hover_border)
+                card_widget.configure(fg_color=hover_bg, border_color=hover_border)
             except Exception:
                 pass
 
         def _on_leave(event=None):
             if not state['hovered']:
                 return
-            # Eğer fare hala kartın sınırları içindeyse (alt bileşene geçtiyse) çıkışı tetikleme
             if event is not None:
                 try:
                     mx, my = card_widget.winfo_pointerxy()
@@ -431,12 +534,9 @@ class FluidAnimator:
                         return
                 except Exception:
                     pass
-            state['hovered'] = False
-            cls.animate_color(card_widget, 'fg_color', hover_bg, normal_bg, duration_ms=cls.TIMING_HOVER)
-            try:
-                card_widget.configure(border_color=normal_border)
-            except Exception:
-                pass
+            _force_reset()
+            if cls._active_hover_reset is _force_reset:
+                cls._active_hover_reset = None
 
         try:
             card_widget.bind("<Enter>", _on_enter, add="+")

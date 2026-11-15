@@ -222,8 +222,10 @@ class SemanticSearchView(ctk.CTkFrame):
             return
 
         c = lambda token: FluentTheme.c(token, self.theme_mode)
+        f = FluentTheme.font
         self.results = results
 
+        FluidAnimator.cancel_chunk_render(self.results_scroll)
         for w in self.results_scroll.winfo_children():
             w.destroy()
 
@@ -237,93 +239,58 @@ class SemanticSearchView(ctk.CTkFrame):
             ctk.CTkLabel(
                 self.results_scroll,
                 text="Arama kriterlerine uygun dosya bulunamadı.",
-                font=ctk.CTkFont(size=13),
+                font=f(13),
                 text_color=c('text_muted')
             ).pack(pady=40)
             return
 
         display_items = self.results[:self.MAX_DISPLAY_RESULTS]
-        for item in display_items:
+
+        def _render_result_row(item, _idx):
             row = ctk.CTkFrame(
                 self.results_scroll,
                 fg_color=c('bg_card'),
                 corner_radius=8,
                 border_width=1,
-                border_color=c('border')
+                border_color=c('border'),
+                height=44
             )
-            row.pack(fill="x", pady=3)
+            row.pack(fill="x", pady=2)
             FluidAnimator.bind_card_hover(row, self.theme_mode)
 
-            inner = ctk.CTkFrame(row, fg_color="transparent")
-            inner.pack(fill="x", padx=12, pady=8)
-
-            left = ctk.CTkFrame(inner, fg_color="transparent")
-            left.pack(side="left", fill="both", expand=True)
-
             badge_txt, icon_ch, badge_fg, badge_bg = FluentTheme.file_badge_style(item['name'], self.theme_mode)
-            title_row = ctk.CTkFrame(left, fg_color="transparent")
-            title_row.pack(anchor="w")
-
             ctk.CTkLabel(
-                title_row,
+                row,
                 text=f"{icon_ch} {badge_txt}",
-                font=ctk.CTkFont(size=9, weight="bold"),
+                font=f(9, "bold"),
                 text_color=badge_fg,
                 fg_color=badge_bg,
                 corner_radius=5,
                 padx=6,
                 pady=2
-            ).pack(side="left", padx=(0, 8))
+            ).pack(side="left", padx=(12, 8), pady=8)
 
+            fname = item['name']
             ctk.CTkLabel(
-                title_row,
-                text=item['name'],
-                font=ctk.CTkFont(size=12, weight="bold"),
+                row,
+                text=fname if len(fname) <= 34 else fname[:31] + "...",
+                font=f(12, "bold"),
                 text_color=c('text_primary'),
                 anchor="w"
-            ).pack(side="left")
+            ).pack(side="left", padx=(0, 10), pady=8)
 
             ctk.CTkLabel(
-                left,
-                text=f"📂 {item['rel_path']}  •  {item['size_human']}  •  {item['modified']}",
-                font=ctk.CTkFont(size=10),
+                row,
+                text=f"📂 {item['rel_path']}  •  {item['size_human']}",
+                font=f(10),
                 text_color=c('text_muted'),
                 anchor="w"
-            ).pack(anchor="w")
-
-            right = ctk.CTkFrame(inner, fg_color="transparent")
-            right.pack(side="right")
+            ).pack(side="left", pady=8)
 
             ctk.CTkButton(
-                right,
-                text="Aç",
-                font=ctk.CTkFont(size=11),
-                fg_color=c('bg_card_hover'),
-                hover_color=c('bg_card_active'),
-                text_color=c('text_primary'),
-                width=50,
-                height=26,
-                corner_radius=4,
-                command=lambda p=item['path']: SearchEngine.open_file(p)
-            ).pack(side="left", padx=4)
-
-            ctk.CTkButton(
-                right,
-                text="Klasörde Göster",
-                font=ctk.CTkFont(size=11),
-                fg_color=c('bg_card_hover'),
-                hover_color=c('bg_card_active'),
-                text_color=c('text_primary'),
-                width=90,
-                height=26,
-                corner_radius=4,
-                command=lambda p=item['path']: SearchEngine.reveal_in_explorer(p)
-            ).pack(side="left", padx=4)
-
-            ctk.CTkButton(
-                right,
+                row,
                 text="Yapay Zeka Analiz",
-                font=ctk.CTkFont(size=11, weight="bold"),
+                font=f(11, "bold"),
                 fg_color=c('accent'),
                 hover_color=c('accent_hover'),
                 text_color="#FFFFFF",
@@ -331,6 +298,41 @@ class SemanticSearchView(ctk.CTkFrame):
                 height=26,
                 corner_radius=4,
                 command=lambda p=item['path']: self._analyze_with_ai(p)
-            ).pack(side="left", padx=4)
+            ).pack(side="right", padx=(4, 12), pady=8)
+
+            ctk.CTkButton(
+                row,
+                text="Klasörde Göster",
+                font=f(11),
+                fg_color=c('bg_card_hover'),
+                hover_color=c('bg_card_active'),
+                text_color=c('text_primary'),
+                width=90,
+                height=26,
+                corner_radius=4,
+                command=lambda p=item['path']: SearchEngine.reveal_in_explorer(p)
+            ).pack(side="right", padx=4, pady=8)
+
+            ctk.CTkButton(
+                row,
+                text="Aç",
+                font=f(11),
+                fg_color=c('bg_card_hover'),
+                hover_color=c('bg_card_active'),
+                text_color=c('text_primary'),
+                width=50,
+                height=26,
+                corner_radius=4,
+                command=lambda p=item['path']: SearchEngine.open_file(p)
+            ).pack(side="right", padx=4, pady=8)
 
             FluentContextMenu.bind_to_widget(row, item['path'], self.app)
+
+        FluidAnimator.render_chunked(
+            self.results_scroll,
+            display_items,
+            _render_result_row,
+            initial_batch=8,
+            chunk_size=10,
+            interval_ms=8
+        )
