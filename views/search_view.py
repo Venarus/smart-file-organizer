@@ -260,13 +260,28 @@ class SemanticSearchView(ctk.CTkFrame):
             left = ctk.CTkFrame(inner, fg_color="transparent")
             left.pack(side="left", fill="both", expand=True)
 
+            badge_txt, icon_ch, badge_fg, badge_bg = FluentTheme.file_badge_style(item['name'], self.theme_mode)
+            title_row = ctk.CTkFrame(left, fg_color="transparent")
+            title_row.pack(anchor="w")
+
             ctk.CTkLabel(
-                left,
-                text=f"📄 {item['name']}",
+                title_row,
+                text=f"{icon_ch} {badge_txt}",
+                font=ctk.CTkFont(size=9, weight="bold"),
+                text_color=badge_fg,
+                fg_color=badge_bg,
+                corner_radius=5,
+                padx=6,
+                pady=2
+            ).pack(side="left", padx=(0, 8))
+
+            ctk.CTkLabel(
+                title_row,
+                text=item['name'],
                 font=ctk.CTkFont(size=12, weight="bold"),
                 text_color=c('text_primary'),
                 anchor="w"
-            ).pack(anchor="w")
+            ).pack(side="left")
 
             ctk.CTkLabel(
                 left,

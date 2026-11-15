@@ -48,11 +48,19 @@ class CommandPalette:
             },
             {
                 'id': 'act_toggle_theme',
-                'title': '🌓 Görünüm Temasını Değiştir (Koyu / Açık)',
-                'subtitle': 'Dark ve Light Fluent tema modları arasında geçiş yapar',
+                'title': '🌓 Görünüm Temasını Değiştir (Gece Camı / Kristal Açık)',
+                'subtitle': 'Midnight Glass ve Crystal Light tema modları arasında geçiş yapar',
                 'category': 'Aksiyon',
-                'keywords': 'tema renk karanlık aydınlık dark light mode',
+                'keywords': 'tema renk karanlık aydınlık dark light mode glass',
                 'action': lambda: app_controller.toggle_theme_quick()
+            },
+            {
+                'id': 'act_cycle_glass',
+                'title': '💎 Pencere Cam Şeffaflığını Değiştir (%95 / %88 / %100)',
+                'subtitle': 'Windows 11 DWM Acrylic pencere geçirgenlik oranını değiştirir',
+                'category': 'Aksiyon',
+                'keywords': 'cam glass şeffaflık acrylic mica saydamlık opacity',
+                'action': lambda: app_controller.cycle_glass_opacity() if hasattr(app_controller, 'cycle_glass_opacity') else None
             },
             {
                 'id': 'act_toggle_watch',

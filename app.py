@@ -1,7 +1,8 @@
 """
-Smart File Organizer V2.1 — Windows 11 Fluent Design + AI File Intelligence System
-Main Application Window, Navigation Controller, View Cache, Command Palette,
-Notification Center, System Tray, and Single-Instance IPC Manager.
+Smart File Organizer v2.1.0 — Premium Glass Edition
+Windows 11 Fluent Acrylic/Mica Glass Design + AI File Intelligence System
+Main Application Shell, Glass Compositor Integration, View Cache,
+Command Palette, Notification Center, System Tray, and Single-Instance IPC.
 """
 
 import os
@@ -31,6 +32,7 @@ from config import (
     DEFAULT_VIDEOS
 )
 from theme import FluentTheme
+from glass_engine import WindowsGlassCompositor, GlassArtEngine
 from watcher import BackgroundWatcher
 from organizer import organize_file
 from storage_analyzer import StorageAnalyzer
@@ -56,12 +58,30 @@ from views.quick_folder_view import QuickFolderView
 
 SINGLE_INSTANCE_PORT = 49285
 
+PAGE_TITLES = {
+    'home': 'GENEL BAKIŞ (DASHBOARD)',
+    'files': 'FOLDERS GEZGİNİ',
+    'media': 'MEDYA & VİDEO GALERİSİ',
+    'ai': 'AI DOSYA ZEKÂSI STÜDYOSU',
+    'search': 'AKILLI ANLAMSAL ARAMA',
+    'smart_org': 'AKILLI DÜZENLEME MERKEZİ',
+    'automation': 'OTOMASYON & İZLEME',
+    'duplicates': 'KOPYA DOSYA YÖNETİCİSİ',
+    'storage': 'DEPOLAMA ANALİZİ',
+    'activity': 'AKTİVİTE GEÇMİŞİ',
+    'security': 'GÜVENLİK & GERİ ALMA (UNDO)',
+    'settings': 'AYARLAR & CAM EFEKTLERİ',
+    'qf_desktop': 'SABİTLENEN › MASAÜSTÜ 📌',
+    'qf_downloads': 'SABİTLENEN › İNDİRİLENLER 📌',
+    'qf_documents': 'SABİTLENEN › BELGELER 📌',
+    'qf_pictures': 'SABİTLENEN › RESİMLER 📌',
+    'qf_music': 'SABİTLENEN › MÜZİKLER 📌',
+    'qf_videos': 'SABİTLENEN › VİDEOLAR 📌',
+}
+
 
 def notify_existing_instance() -> bool:
-    """
-    Halihazırda arka planda çalışan bir örnek varsa ona 'SHOW' sinyali gönderir.
-    Başarılı olursa True döner (böylece yeni açılan örnek kendisini kapatır).
-    """
+    """Halihazırda arka planda çalışan bir örnek varsa ona 'SHOW_WINDOW' sinyali gönderir."""
     try:
         with socket.create_connection(("127.0.0.1", SINGLE_INSTANCE_PORT), timeout=0.6) as s:
             s.sendall(b"SHOW_WINDOW")
@@ -83,17 +103,17 @@ class SmartFileOrganizerApp(ctk.CTk):
         FluentTheme.apply_appearance(self.cfg.get('theme', 'dark'))
 
         # Pencere Ayarları
-        self.title(f"Smart File Organizer v{APP_VERSION} — AI File Intelligence")
-        self.geometry("1220x780")
-        self.minsize(1020, 660)
+        self.title(f"Smart File Organizer v{APP_VERSION} — Premium Glass Edition")
+        self.geometry("1260x800")
+        self.minsize(1040, 680)
 
-        # Windows 11 DWM Koyu Başlık Çubuğu & Mica/Yuvarlatılmış Köşe Desteği
+        # Windows 11 DWM Acrylic/Mica Cam & Şeffaflık Entegrasyonu
         self._apply_windows_11_dwm()
 
-        # Thread-Safe UI Köprüsünü Başlat (Python 3.15 Uyumluluğu)
+        # Thread-Safe UI Köprüsünü Başlat
         UIBridge.start(self)
 
-        # Navigasyon ve Görünüm Önbelleği (Flicker-free Instant Navigation)
+        # Navigasyon ve Görünüm Önbelleği
         self.nav_buttons = {}
         self.nav_indicators = {}
         self.section_frames = {}
@@ -115,11 +135,11 @@ class SmartFileOrganizerApp(ctk.CTk):
         self._ipc_server = None
         self._start_single_instance_listener()
 
-        # Ana Düzeni Oluştur
+        # Ana Cam Düzenini Oluştur
         self._preload_pinned_icons()
         self._build_layout()
 
-        # Sürükle-Bırak Desteği (Pencere Geneli)
+        # Sürükle-Bırak Desteği
         if HAS_WINDND:
             try:
                 windnd.hook_dropfiles(self, func=self._on_global_files_dropped)
@@ -139,22 +159,23 @@ class SmartFileOrganizerApp(ctk.CTk):
         # İlk Sayfayı Aç
         self.navigate_to('home')
 
-        # Periyodik Durum Çubuğu Güncelleyici
+        # Periyodik Durum Güncelleyici
         self._periodic_status_update()
 
-        # Başlangıç bildirimi (Sadece bildirim merkezine sessiz kayıt)
         NotificationCenter.add(
-            title="Sistem Hazır",
-            message=f"Smart File Organizer v{APP_VERSION} arka plan izleme motoru aktif.",
+            title="Premium Glass Motoru Aktif",
+            message=f"Smart File Organizer v{APP_VERSION} Acrylic Glass arayüzü ve arka plan izleyicisi hazır.",
             level="info"
         )
         self.update_notification_badge()
 
+        # Pencere çizildikten sonra DWM Acrylic/Mica özniteliklerini tekrar pekiştir
+        self.after(120, self._apply_windows_11_dwm)
+
         if start_minimized:
-            self.after(100, self.hide_to_tray)
+            self.after(150, self.hide_to_tray)
 
     def _bind_shortcuts(self):
-        """Uygulama geneli klavye kısayollarını bağlar."""
         self.bind("<Control-k>", lambda _e: CommandPalette.toggle(self))
         self.bind("<Control-K>", lambda _e: CommandPalette.toggle(self))
         self.bind("<Control-f>", lambda _e: self._focus_global_search())
@@ -181,8 +202,8 @@ class SmartFileOrganizerApp(ctk.CTk):
                 self.current_view.on_page_show()
         FluidAnimator.show_toast(
             self,
-            "Görünüm Yenilendi",
-            "Sayfa verileri ve önbellek güncellendi.",
+            "Cam Yüzey Yenilendi",
+            "Aktif sayfa verileri ve önbellek güncellendi.",
             theme_mode=self.theme_mode,
             duration_ms=1800,
             level='info'
@@ -194,7 +215,6 @@ class SmartFileOrganizerApp(ctk.CTk):
         FluentContextMenu.close_active()
 
     def _on_global_left_click(self, event):
-        """Açık bağlam menüsü varsa dışarı tıklandığında kapatır."""
         if FluentContextMenu._active_menu is not None:
             try:
                 menu = FluentContextMenu._active_menu
@@ -208,7 +228,6 @@ class SmartFileOrganizerApp(ctk.CTk):
                 FluentContextMenu.close_active()
 
     def _start_single_instance_listener(self):
-        """Arka planda çalışırken masaüstü kısayoluna tekrar tıklandığında pencereyi öne getirir."""
         def _listen():
             try:
                 srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -230,7 +249,6 @@ class SmartFileOrganizerApp(ctk.CTk):
         threading.Thread(target=_listen, daemon=True).start()
 
     def _preload_pinned_icons(self):
-        """Windows 11 Hızlı Erişim klasörlerinin gerçek kabuk (shell) ikonlarını yükler."""
         folder_map = {
             'qf_desktop': DEFAULT_DESKTOP,
             'qf_downloads': DEFAULT_DOWNLOADS,
@@ -253,48 +271,67 @@ class SmartFileOrganizerApp(ctk.CTk):
         return 'dark'
 
     def _apply_windows_11_dwm(self):
-        """Windows 11 DWM API ile koyu/açık pencere başlığı ve Mica/Yuvarlatılmış köşe uygular."""
-        try:
-            hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
-            if not hwnd:
-                hwnd = self.winfo_id()
+        """Windows 11 DWM Acrylic/Mica arka planı ve pencere yarı-saydamlığını uygular."""
+        opacity = float(self.cfg.get('glass_opacity', 0.95))
+        WindowsGlassCompositor.apply_glass_window(
+            self,
+            theme_mode=self.theme_mode,
+            glass_opacity=opacity
+        )
 
-            is_dark = 1 if self.theme_mode == 'dark' else 0
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                hwnd, 20, ctypes.byref(ctypes.c_int(is_dark)), ctypes.sizeof(ctypes.c_int)
-            )
-            # DWMWA_WINDOW_CORNER_PREFERENCE = 33 (DWMWCP_ROUND = 2)
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                hwnd, 33, ctypes.byref(ctypes.c_int(2)), ctypes.sizeof(ctypes.c_int)
-            )
-        except Exception:
-            pass
+    def set_glass_opacity(self, opacity: float):
+        """Pencere cam şeffaflığını (0.85 - 1.00) canlı olarak günceller ve kaydeder."""
+        opacity = max(0.85, min(1.0, round(float(opacity), 2)))
+        self.cfg['glass_opacity'] = opacity
+        save_config(self.cfg)
+        self._apply_windows_11_dwm()
+        if hasattr(self, 'btn_glass_opacity') and self.btn_glass_opacity.winfo_exists():
+            pct = int(round(opacity * 100))
+            self.btn_glass_opacity.configure(text=f"💎 Cam %{pct}")
+
+    def cycle_glass_opacity(self):
+        """Üst bardaki Cam butonuna tıklandığında şeffaflık katmanları arasında geçiş yapar."""
+        cur = round(float(self.cfg.get('glass_opacity', 0.95)), 2)
+        presets = [0.95, 0.88, 1.00]
+        try:
+            idx = presets.index(cur)
+            nxt = presets[(idx + 1) % len(presets)]
+        except ValueError:
+            nxt = 0.95
+        self.set_glass_opacity(nxt)
+        pct = int(round(nxt * 100))
+        label_map = {95: "Fluent Acrylic Cam (%95)", 88: "Ultra Şeffaf Cam (%88)", 100: "Tam Kristal (%100)"}
+        FluidAnimator.show_toast(
+            self,
+            "Cam Şeffaflığı Değiştirildi",
+            label_map.get(pct, f"Cam Opaklığı: %{pct}"),
+            theme_mode=self.theme_mode,
+            duration_ms=2000,
+            level='info'
+        )
 
     def _build_layout(self):
         c = lambda token: FluentTheme.c(token, self.theme_mode)
         self.configure(fg_color=c('bg_primary'))
 
-        # Grid Yapılandırması (Sol Sidebar Sabit, Sağ İçerik Esnek)
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
 
-        # 1. SOL GEZİNME PANELİ (SIDEBAR)
+        # 1. SOL YARI-SAYDAM CAM GEZİNME PANELİ (FLOATING GLASS SIDEBAR)
         self._build_sidebar()
 
-        # 2. SAĞ ANA ALAN (ÜST BAR + SAYFA İÇERİĞİ)
+        # 2. SAĞ ANA ÇALIŞMA ALANI (ÜST CAM KOMUT BARI + SAYFA TUVALİ)
         self.right_panel = ctk.CTkFrame(self, fg_color=c('bg_mica'), corner_radius=0)
         self.right_panel.grid(row=0, column=1, sticky="nsew")
         self.right_panel.grid_rowconfigure(0, weight=0)
         self.right_panel.grid_rowconfigure(1, weight=1)
         self.right_panel.grid_columnconfigure(0, weight=1)
 
-        # Üst Bar (Global Arama + Komut Paleti + Bildirim Merkezi + Tema + Hızlı Aksiyon)
         self._build_top_header()
 
-        # Ana Sayfa İçerik Konteyneri
         self.content_container = ctk.CTkFrame(self.right_panel, fg_color="transparent")
-        self.content_container.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+        self.content_container.grid(row=1, column=0, sticky="nsew", padx=10, pady=(2, 10))
 
     def _build_sidebar(self):
         c = lambda token: FluentTheme.c(token, self.theme_mode)
@@ -302,55 +339,73 @@ class SmartFileOrganizerApp(ctk.CTk):
         self.sidebar = ctk.CTkFrame(
             self,
             fg_color=c('bg_secondary'),
-            width=252,
+            width=262,
             corner_radius=0,
             border_width=1,
-            border_color=c('border_subtle')
+            border_color=c('border')
         )
         self.sidebar.grid(row=0, column=0, sticky="nsew")
         self.sidebar.grid_propagate(False)
 
-        # Logo & Uygulama Başlığı
-        brand_box = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        brand_box.pack(fill="x", padx=16, pady=(16, 8))
+        # Üst Cam Marka Kartı (Translucent Glass Brand Pod)
+        brand_pod = ctk.CTkFrame(
+            self.sidebar,
+            fg_color=c('bg_card'),
+            corner_radius=12,
+            border_width=1,
+            border_color=c('border')
+        )
+        brand_pod.pack(fill="x", padx=12, pady=(14, 8))
+        FluidAnimator.bind_card_hover(brand_pod, self.theme_mode)
 
+        brand_box = ctk.CTkFrame(brand_pod, fg_color="transparent")
+        brand_box.pack(fill="x", padx=12, pady=10)
+
+        orb_img = GlassArtEngine.get_glass_orb(38, c('accent'), self.theme_mode)
         logo_badge = ctk.CTkLabel(
             brand_box,
             text="⚡",
-            font=ctk.CTkFont(size=22),
-            fg_color=c('accent'),
-            text_color="#FFFFFF",
-            corner_radius=8,
-            width=36,
-            height=36
+            image=orb_img,
+            compound="center",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=c('text_primary'),
+            width=38,
+            height=38
         )
         logo_badge.pack(side="left", padx=(0, 10))
 
         brand_text = ctk.CTkFrame(brand_box, fg_color="transparent")
-        brand_text.pack(side="left")
+        brand_text.pack(side="left", fill="x", expand=True)
 
         ctk.CTkLabel(
             brand_text,
             text="Smart Organizer",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=ctk.CTkFont(family="Segoe UI Variable Display", size=15, weight="bold"),
             text_color=c('text_primary')
         ).pack(anchor="w")
 
-        ctk.CTkLabel(
-            brand_text,
-            text=f"Fluent Motion v{APP_VERSION}",
-            font=ctk.CTkFont(size=11),
-            text_color=c('accent_light')
-        ).pack(anchor="w")
+        badge_row = ctk.CTkFrame(brand_text, fg_color="transparent")
+        badge_row.pack(anchor="w", pady=(1, 0))
 
-        # Kaydırılabilir Menü Listesi
+        ctk.CTkLabel(
+            badge_row,
+            text=f"💎 GLASS v{APP_VERSION}",
+            font=ctk.CTkFont(size=9, weight="bold"),
+            text_color=c('accent_light'),
+            fg_color=c('accent_subtle'),
+            corner_radius=4,
+            padx=6,
+            pady=1
+        ).pack(side="left")
+
+        # Kaydırılabilir Cam Menü Listesi
         nav_scroll = ctk.CTkScrollableFrame(
             self.sidebar,
             fg_color="transparent",
             scrollbar_button_color=c('border'),
-            scrollbar_button_hover_color=c('text_muted')
+            scrollbar_button_hover_color=c('accent')
         )
-        nav_scroll.pack(fill="both", expand=True, padx=6, pady=2)
+        nav_scroll.pack(fill="both", expand=True, padx=8, pady=2)
 
         self.nav_buttons.clear()
         self.nav_indicators.clear()
@@ -372,7 +427,7 @@ class SmartFileOrganizerApp(ctk.CTk):
             ),
             (
                 "sec_explore",
-                "KEŞFET VE YÖNET",
+                "ÇALIŞMA ALANI & KEŞİF",
                 [
                     ('home', 'Genel Bakış', '🏠', None),
                     ('files', 'Folders Gezgini', '📁', None),
@@ -381,23 +436,23 @@ class SmartFileOrganizerApp(ctk.CTk):
             ),
             (
                 "sec_ai",
-                "AKILLI SİSTEMLER",
+                "YAPAY ZEKÂ & OTOMASYON",
                 [
                     ('ai', 'AI Dosya Zekâsı', '🧠', None),
                     ('search', 'Akıllı Arama', '🔍', None),
                     ('smart_org', 'Hızlı Düzenle', '✨', None),
-                    ('automation', 'Otomasyon', '⚡', None),
+                    ('automation', 'Otomasyon Motoru', '⚡', None),
                 ]
             ),
             (
                 "sec_tools",
-                "ANALİZ VE GÜVENLİK",
+                "ANALİZ & GÜVENLİK",
                 [
                     ('duplicates', 'Kopya Yönetici', '📑', None),
                     ('storage', 'Depolama Analizi', '📊', None),
                     ('activity', 'Aktivite Merkezi', '🕒', None),
-                    ('security', 'Güvenlik & Yedek', '🛡️', None),
-                    ('settings', 'Ayarlar', '⚙️', None),
+                    ('security', 'Güvenlik & Undo', '🛡️', None),
+                    ('settings', 'Ayarlar & Cam UI', '⚙️', None),
                 ]
             )
         ]
@@ -426,19 +481,18 @@ class SmartFileOrganizerApp(ctk.CTk):
             self.section_frames[sec_id] = (sec_container, hdr_btn)
 
             for page_id, label, fallback_emoji, icon_img in items:
-                row_holder = ctk.CTkFrame(sec_container, fg_color="transparent", height=34)
+                row_holder = ctk.CTkFrame(sec_container, fg_color="transparent", height=35)
                 row_holder.pack(fill="x", pady=1)
                 row_holder.pack_propagate(False)
 
-                # Sol Aktif Vurgu Çubuğu (Fluent Active Indicator Pill)
                 indicator = ctk.CTkFrame(
                     row_holder,
                     fg_color="transparent",
                     width=4,
-                     height=18,
+                    height=18,
                     corner_radius=2
                 )
-                indicator.pack(side="left", padx=(2, 3), pady=8)
+                indicator.pack(side="left", padx=(2, 4), pady=8)
                 self.nav_indicators[page_id] = indicator
 
                 if icon_img is not None:
@@ -452,8 +506,8 @@ class SmartFileOrganizerApp(ctk.CTk):
                         fg_color="transparent",
                         hover_color=c('bg_card_hover'),
                         text_color=c('text_secondary'),
-                        height=32,
-                        corner_radius=7,
+                        height=33,
+                        corner_radius=8,
                         command=lambda pid=page_id: self.navigate_to(pid)
                     )
                 else:
@@ -465,41 +519,56 @@ class SmartFileOrganizerApp(ctk.CTk):
                         fg_color="transparent",
                         hover_color=c('bg_card_hover'),
                         text_color=c('text_secondary'),
-                        height=32,
-                        corner_radius=7,
+                        height=33,
+                        corner_radius=8,
                         command=lambda pid=page_id: self.navigate_to(pid)
                     )
                 btn.pack(side="left", fill="both", expand=True, padx=(0, 2))
                 self.nav_buttons[page_id] = btn
 
-        # Alt Durum Özeti Kartı
+        # Alt Canlı Telemetri Cam Kapsülü (Live Glass Telemetry Pod)
         self.footer_card = ctk.CTkFrame(
             self.sidebar,
             fg_color=c('bg_card'),
-            corner_radius=10,
+            corner_radius=12,
             border_width=1,
             border_color=c('border')
         )
         self.footer_card.pack(fill="x", side="bottom", padx=12, pady=12)
+        FluidAnimator.bind_card_hover(self.footer_card, self.theme_mode)
 
         f_inner = ctk.CTkFrame(self.footer_card, fg_color="transparent")
         f_inner.pack(fill="x", padx=12, pady=10)
 
+        top_stat = ctk.CTkFrame(f_inner, fg_color="transparent")
+        top_stat.pack(fill="x")
+
         self.lbl_watch_state = ctk.CTkLabel(
-            f_inner,
-            text="🟢 İzleme Aktif",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            top_stat,
+            text="🟢 AI İzleyici Aktif",
+            font=ctk.CTkFont(size=11, weight="bold"),
             text_color=c('success')
         )
-        self.lbl_watch_state.pack(anchor="w")
+        self.lbl_watch_state.pack(side="left")
+
+        ctk.CTkLabel(
+            top_stat,
+            text="CANLI",
+            font=ctk.CTkFont(size=9, weight="bold"),
+            text_color=c('accent_light'),
+            fg_color=c('accent_subtle'),
+            corner_radius=4,
+            padx=5,
+            pady=1
+        ).pack(side="right")
 
         self.lbl_watch_folders = ctk.CTkLabel(
             f_inner,
-            text=f"İzlenen Klasör: {len(self.cfg.get('sources', []))}",
+            text=f"İzlenen Kaynak: {len(self.cfg.get('sources', []))} klasör",
             font=ctk.CTkFont(size=11),
             text_color=c('text_secondary')
         )
-        self.lbl_watch_folders.pack(anchor="w", pady=(2, 0))
+        self.lbl_watch_folders.pack(anchor="w", pady=(3, 0))
 
         self.lbl_last_scan = ctk.CTkLabel(
             f_inner,
@@ -510,7 +579,6 @@ class SmartFileOrganizerApp(ctk.CTk):
         self.lbl_last_scan.pack(anchor="w")
 
     def _toggle_sidebar_section(self, sec_id: str, sec_title: str):
-        """Gezinme panelindeki kategori bölümlerini yumuşak şekilde açar/kapatır."""
         pair = self.section_frames.get(sec_id)
         if not pair:
             return
@@ -532,18 +600,30 @@ class SmartFileOrganizerApp(ctk.CTk):
         self.top_bar = ctk.CTkFrame(
             self.right_panel,
             fg_color=c('bg_secondary'),
-            height=58,
+            height=62,
             corner_radius=0,
             border_width=1,
-            border_color=c('border_subtle')
+            border_color=c('border')
         )
         self.top_bar.grid(row=0, column=0, sticky="ew")
         self.top_bar.grid_propagate(False)
 
         inner_bar = ctk.CTkFrame(self.top_bar, fg_color="transparent")
-        inner_bar.pack(fill="both", expand=True, padx=16, pady=10)
+        inner_bar.pack(fill="both", expand=True, padx=18, pady=10)
 
-        # Global Arama Çubuğu
+        # Sol: Dinamik Cam Breadcrumb Göstergesi
+        breadcrumb_box = ctk.CTkFrame(inner_bar, fg_color="transparent")
+        breadcrumb_box.pack(side="left", padx=(0, 12))
+
+        self.lbl_breadcrumb = ctk.CTkLabel(
+            breadcrumb_box,
+            text="GLASS WORKSPACE  ›  GENEL BAKIŞ",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=c('accent_light')
+        )
+        self.lbl_breadcrumb.pack(side="left")
+
+        # Orta: Yarı-Saydam Arama ve Komut Paleti Çubuğu
         search_box = ctk.CTkFrame(inner_bar, fg_color="transparent")
         search_box.pack(side="left", fill="x", expand=True)
 
@@ -554,34 +634,51 @@ class SmartFileOrganizerApp(ctk.CTk):
             fg_color=c('bg_input'),
             border_color=c('border'),
             text_color=c('text_primary'),
-            width=340,
+            width=280,
             height=34,
-            corner_radius=8
+            corner_radius=9
         )
         self.global_search_entry.pack(side="left")
         self.global_search_entry.bind("<Return>", self._on_global_search_enter)
         FluidAnimator.bind_input_focus(self.global_search_entry, self.theme_mode)
 
-        # Komut Paleti Tetikleyici Butonu (Ctrl+K)
         self.btn_cmd_palette = ctk.CTkButton(
             search_box,
             text="⌘ Komutlar (Ctrl+K)",
             font=ctk.CTkFont(size=11, weight="bold"),
             fg_color=c('bg_card'),
             hover_color=c('bg_card_hover'),
-            text_color=c('accent_light'),
+            text_color=c('accent_violet_light'),
             border_width=1,
             border_color=c('border'),
             height=34,
-             width=136,
-            corner_radius=8,
+            width=136,
+            corner_radius=9,
             command=lambda: CommandPalette.toggle(self)
         )
         self.btn_cmd_palette.pack(side="left", padx=(8, 0))
 
-        # Sağ Üst Kontroller
+        # Sağ: Cam Kontroller Kümesi
         controls_box = ctk.CTkFrame(inner_bar, fg_color="transparent")
         controls_box.pack(side="right")
+
+        # Canlı Cam Şeffaflığı Seçici (💎 Cam %95)
+        cur_pct = int(round(float(self.cfg.get('glass_opacity', 0.95)) * 100))
+        self.btn_glass_opacity = ctk.CTkButton(
+            controls_box,
+            text=f"💎 Cam %{cur_pct}",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=c('bg_card'),
+            hover_color=c('bg_card_hover'),
+            text_color=c('accent_light'),
+            border_width=1,
+            border_color=c('border'),
+            height=32,
+            width=92,
+            corner_radius=8,
+            command=self.cycle_glass_opacity
+        )
+        self.btn_glass_opacity.pack(side="left", padx=4)
 
         # Şimdi Tara Butonu
         ctk.CTkButton(
@@ -590,11 +687,12 @@ class SmartFileOrganizerApp(ctk.CTk):
             font=ctk.CTkFont(size=12, weight="bold"),
             fg_color=c('accent'),
             hover_color=c('accent_hover'),
+            text_color="#FFFFFF",
             height=32,
             width=106,
-            corner_radius=6,
+            corner_radius=8,
             command=self.trigger_manual_scan
-        ).pack(side="left", padx=5)
+        ).pack(side="left", padx=4)
 
         # Bildirim Merkezi Butonu (🔔)
         self.btn_notifications = ctk.CTkButton(
@@ -604,9 +702,11 @@ class SmartFileOrganizerApp(ctk.CTk):
             fg_color=c('bg_card'),
             hover_color=c('bg_card_hover'),
             text_color=c('text_primary'),
+            border_width=1,
+            border_color=c('border'),
             width=46,
             height=32,
-            corner_radius=6,
+            corner_radius=8,
             command=lambda: NotificationCenter.toggle_flyout(self)
         )
         self.btn_notifications.pack(side="left", padx=4)
@@ -614,13 +714,17 @@ class SmartFileOrganizerApp(ctk.CTk):
         # Tema Değiştirici
         self.theme_seg = ctk.CTkSegmentedButton(
             controls_box,
-            values=["🌙 Koyu", "☀️ Açık"],
-            font=ctk.CTkFont(size=11),
+            values=["🌙 Gece Camı", "☀️ Kristal"],
+            font=ctk.CTkFont(size=11, weight="bold"),
             height=30,
+            selected_color=c('accent'),
+            selected_hover_color=c('accent_hover'),
+            unselected_color=c('bg_card'),
+            unselected_hover_color=c('bg_card_hover'),
             command=self._on_top_theme_toggle
         )
-        self.theme_seg.pack(side="left", padx=5)
-        self.theme_seg.set("☀️ Açık" if self.theme_mode == 'light' else "🌙 Koyu")
+        self.theme_seg.pack(side="left", padx=4)
+        self.theme_seg.set("☀️ Kristal" if self.theme_mode == 'light' else "🌙 Gece Camı")
 
         # Ayarlar Kısayol Butonu
         ctk.CTkButton(
@@ -628,15 +732,16 @@ class SmartFileOrganizerApp(ctk.CTk):
             text="⚙️",
             width=34,
             height=32,
-            corner_radius=6,
+            corner_radius=8,
             fg_color=c('bg_card'),
             hover_color=c('bg_card_hover'),
             text_color=c('text_primary'),
+            border_width=1,
+            border_color=c('border'),
             command=lambda: self.navigate_to('settings')
         ).pack(side="left", padx=(4, 0))
 
     def update_notification_badge(self):
-        """Üst bardaki 🔔 Bildirim Merkezi butonunun okunmamış sayacını günceller."""
         if not hasattr(self, 'btn_notifications'):
             return
         try:
@@ -647,27 +752,32 @@ class SmartFileOrganizerApp(ctk.CTk):
             if unread > 0:
                 self.btn_notifications.configure(
                     text=f"🔔 {unread}",
-                    text_color=c('accent_light')
+                    text_color=c('accent_light'),
+                    border_color=c('accent')
                 )
             else:
                 self.btn_notifications.configure(
                     text="🔔",
-                    text_color=c('text_primary')
+                    text_color=c('text_primary'),
+                    border_color=c('border')
                 )
         except Exception:
             pass
 
     def navigate_to(self, page_id):
         """
-        Sayfalar arası anlık, titreşimsiz (flicker-free) önbellekli geçiş sağlar
-        ve aktif yan menü vurgu çubuğunu (indicator pill) günceller.
+        Sayfalar arası önbellekli (flicker-free) geçiş sağlar,
+        aktif cam kenar çubuğu göstergesini ve üst breadcrumb başlığını günceller.
         """
         c = lambda token: FluentTheme.c(token, self.theme_mode)
         self._close_overlays()
 
         self.current_page_id = page_id
 
-        # Sidebar butonlarının ve sol aktif gösterge çubuğunun stilini güncelle
+        if hasattr(self, 'lbl_breadcrumb') and self.lbl_breadcrumb.winfo_exists():
+            title_str = PAGE_TITLES.get(page_id, page_id.upper())
+            self.lbl_breadcrumb.configure(text=f"GLASS WORKSPACE  ›  {title_str}")
+
         for pid, btn in self.nav_buttons.items():
             ind = self.nav_indicators.get(pid)
             if pid == page_id:
@@ -687,14 +797,12 @@ class SmartFileOrganizerApp(ctk.CTk):
                 if ind:
                     ind.configure(fg_color="transparent")
 
-        # Mevcut görünümü gizle (Yok etmeden önbellekte tut)
         if self.current_view is not None:
             try:
                 self.current_view.pack_forget()
             except Exception:
                 pass
 
-        # Hedef görünümü önbellekten al veya ilk kez oluştur
         if page_id not in self._view_cache or not self._view_cache[page_id].winfo_exists():
             view_map = {
                 'qf_desktop': lambda: QuickFolderView(self.content_container, self, 'desktop'),
@@ -733,7 +841,7 @@ class SmartFileOrganizerApp(ctk.CTk):
         self.change_theme(next_mode)
 
     def _on_top_theme_toggle(self, val):
-        mode = 'light' if "Açık" in val else 'dark'
+        mode = 'light' if ("Kristal" in val or "Açık" in val) else 'dark'
         self.change_theme(mode)
 
     def change_theme(self, mode_pref):
@@ -743,7 +851,6 @@ class SmartFileOrganizerApp(ctk.CTk):
         self.theme_mode = self._resolve_theme(mode_pref)
         self._apply_windows_11_dwm()
 
-        # Önbellekteki görünümleri temizle ve arayüzü yeni temayla oluştur
         self._view_cache.clear()
         self.current_view = None
         for w in self.winfo_children():
@@ -765,8 +872,8 @@ class SmartFileOrganizerApp(ctk.CTk):
         if self.cfg.get('notifications', True):
             FluidAnimator.show_toast(
                 self,
-                "Tarama Başlatıldı",
-                "İzlenen klasörler taranıyor ve yeni dosyalar organize ediliyor.",
+                "Akıllı Tarama Başlatıldı",
+                "İzlenen tüm klasörler analiz ediliyor ve yeni dosyalar organize ediliyor.",
                 theme_mode=self.theme_mode,
                 duration_ms=2200,
                 level='info'
@@ -778,7 +885,6 @@ class SmartFileOrganizerApp(ctk.CTk):
             os.startfile(target)
 
     def handle_background_events(self, events):
-        """Arka plan izleyiciden veya sürükle-bırak işleminden gelen sonuçları UI thread'inde işler."""
         if not events:
             return
 
@@ -787,10 +893,11 @@ class SmartFileOrganizerApp(ctk.CTk):
             self.update_status_footer()
             if self.cfg.get('notifications', True):
                 last_ev = events[-1]
+                fname = last_ev.get('file_name') or last_ev.get('file', '')
                 FluidAnimator.show_toast(
                     self,
                     "AI Dosya Organizasyonu",
-                    f"{last_ev['file_name']} ➔ {last_ev['category']}",
+                    f"{fname} ➔ {last_ev.get('category', '')}",
                     theme_mode=self.theme_mode,
                     level='success'
                 )
@@ -800,7 +907,6 @@ class SmartFileOrganizerApp(ctk.CTk):
         UIBridge.post(_process_on_ui)
 
     def _on_global_files_dropped(self, file_bytes_list):
-        """Kullanıcı pencereye dosya sürükleyip bıraktığında çalışır."""
         paths = []
         for b in file_bytes_list:
             if isinstance(b, bytes):
@@ -814,7 +920,6 @@ class SmartFileOrganizerApp(ctk.CTk):
         self.on_files_dropped(paths)
 
     def on_files_dropped(self, paths):
-        """Dosya veya klasör yolları listesini arka planda organize eder."""
         if not paths:
             return
 
@@ -862,11 +967,11 @@ class SmartFileOrganizerApp(ctk.CTk):
             summary = self.watcher.get_status_summary()
 
             if summary['is_active']:
-                self.lbl_watch_state.configure(text="🟢 İzleme Aktif", text_color=c('success'))
+                self.lbl_watch_state.configure(text="🟢 AI İzleyici Aktif", text_color=c('success'))
             else:
-                self.lbl_watch_state.configure(text="⏸️ İzleme Duraklatıldı", text_color=c('warning'))
+                self.lbl_watch_state.configure(text="⏸️ İzleyici Duraklatıldı", text_color=c('warning'))
 
-            self.lbl_watch_folders.configure(text=f"İzlenen Klasör: {summary['monitored_count']}")
+            self.lbl_watch_folders.configure(text=f"İzlenen Kaynak: {summary['monitored_count']} klasör")
             self.lbl_last_scan.configure(text=f"Son Tarama: {summary['last_scan']}")
         except Exception:
             pass
@@ -879,8 +984,8 @@ class SmartFileOrganizerApp(ctk.CTk):
     def _create_tray_image(self):
         image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
         d = ImageDraw.Draw(image)
-        d.rounded_rectangle((4, 12, 60, 54), radius=8, fill=(0, 120, 212))
-        d.polygon([(4, 18), (26, 18), (32, 10), (8, 10)], fill=(96, 205, 255))
+        d.rounded_rectangle((4, 12, 60, 54), radius=10, fill=(14, 165, 233))
+        d.polygon([(4, 18), (26, 18), (32, 10), (8, 10)], fill=(139, 92, 246))
         return image
 
     def _init_tray(self):
@@ -890,14 +995,18 @@ class SmartFileOrganizerApp(ctk.CTk):
             pystray.MenuItem("Folders Klasörünü Aç", lambda icon, item: self.open_target_folder()),
             pystray.MenuItem("Çıkış", self.quit_app)
         )
-        self.tray_icon = pystray.Icon("SmartFileOrganizer", self._create_tray_image(), "Smart File Organizer v2.1", menu)
+        self.tray_icon = pystray.Icon(
+            "SmartFileOrganizer",
+            self._create_tray_image(),
+            f"Smart File Organizer v{APP_VERSION} Glass",
+            menu
+        )
         threading.Thread(target=self.tray_icon.run, daemon=True).start()
 
     def hide_to_tray(self):
         self.withdraw()
 
     def show_window_from_tray(self, icon=None, item=None):
-        """Arka planda veya sistem tepsisinde olan pencereyi ekranın en önüne getirir."""
         def _restore():
             try:
                 self.deiconify()
@@ -928,7 +1037,6 @@ class SmartFileOrganizerApp(ctk.CTk):
 
 
 def main():
-    # Eğer arka planda zaten çalışan bir örnek varsa onu öne getir ve çık
     if notify_existing_instance():
         sys.exit(0)
 
@@ -939,4 +1047,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -27,6 +27,7 @@ from config import (
     get_effective_animation_mode
 )
 from theme import FluentTheme
+from glass_engine import WindowsGlassCompositor, GlassArtEngine
 from animation import Easing, FluidAnimator, UIBridge
 from notification_center import NotificationCenter
 from command_palette import CommandPalette
@@ -40,7 +41,9 @@ class TestV21Upgrade(unittest.TestCase):
         self.assertEqual(APP_VERSION, "2.1.0")
         self.assertIn('animation_mode', DEFAULT_CONFIG)
         self.assertIn('respect_system_motion', DEFAULT_CONFIG)
+        self.assertIn('glass_opacity', DEFAULT_CONFIG)
         self.assertEqual(DEFAULT_CONFIG['animation_mode'], 'full')
+        self.assertAlmostEqual(DEFAULT_CONFIG['glass_opacity'], 0.95, places=2)
         self.assertIsInstance(get_system_reduced_motion(), bool)
 
     def test_02_easing_curves(self):
@@ -230,6 +233,17 @@ class TestV21Upgrade(unittest.TestCase):
             self.assertTrue(app.section_collapsed.get("sec_pinned"))
             app._toggle_sidebar_section("sec_pinned", "SABİTLENEN KLASÖRLER 📌")
             self.assertFalse(app.section_collapsed.get("sec_pinned"))
+
+            # Test Glass Engine & Live Glass Opacity Cycling
+            orb = GlassArtEngine.get_glass_orb(38, "#38BDF8", "dark")
+            self.assertIsNotNone(orb)
+            banner = GlassArtEngine.get_hero_banner(600, 100, "dark")
+            self.assertIsNotNone(banner)
+            badge_txt, _, _, _ = FluentTheme.file_badge_style("rapor.pdf", "dark")
+            self.assertEqual(badge_txt, "DOC")
+            app.cycle_glass_opacity()
+            self.assertIn(round(float(app.cfg.get('glass_opacity', 0.95)), 2), (0.88, 0.95, 1.00))
+            app.set_glass_opacity(0.95)
         finally:
             FluidAnimator.cancel_all()
             UIBridge.stop()

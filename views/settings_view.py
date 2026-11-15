@@ -1,6 +1,13 @@
+"""
+Settings & Glass Customization Studio (V2.1 — Premium Glass Edition)
+Allows live control of Windows 11 DWM Acrylic/Glass Opacity (85% - 100%),
+Midnight/Crystal Themes, Fluent Motion Modes, Windows Startup, and Desktop Baseline Protection.
+"""
+
 import customtkinter as ctk
 from tkinter import messagebox
 from theme import FluentTheme
+from glass_engine import GlassArtEngine
 from config import save_config, set_startup, refresh_desktop_baseline, APP_VERSION
 from animation import FluidAnimator
 
@@ -22,64 +29,127 @@ class SettingsView(ctk.CTkFrame):
     def _build_ui(self):
         c = lambda token: FluentTheme.c(token, self.theme_mode)
 
-        # Başlık
-        title_box = ctk.CTkFrame(self, fg_color="transparent")
-        title_box.pack(fill="x", padx=16, pady=(10, 14))
+        # Üst Cam Başlık Kartı
+        top_card = ctk.CTkFrame(
+            self,
+            fg_color=c('bg_card'),
+            corner_radius=14,
+            border_width=1,
+            border_color=c('border')
+        )
+        top_card.pack(fill="x", padx=12, pady=(6, 10))
+        FluidAnimator.bind_card_hover(top_card, self.theme_mode)
+
+        top_inner = ctk.CTkFrame(top_card, fg_color="transparent")
+        top_inner.pack(fill="x", padx=18, pady=14)
+
+        orb = GlassArtEngine.get_glass_orb(38, c('accent'), self.theme_mode)
+        ctk.CTkLabel(top_inner, text="⚙️", image=orb, compound="center", font=ctk.CTkFont(size=17), width=38, height=38).pack(side="left", padx=(0, 12))
+
+        title_col = ctk.CTkFrame(top_inner, fg_color="transparent")
+        title_col.pack(side="left")
 
         ctk.CTkLabel(
-            title_box,
-            text="Ayarlar ve Erişilebilirlik (Settings)",
-            font=ctk.CTkFont(size=24, weight="bold"),
+            title_col,
+            text="Ayarlar, Şeffaf Cam (Acrylic) ve Erişilebilirlik",
+            font=ctk.CTkFont(family="Segoe UI Variable Display", size=21, weight="bold"),
             text_color=c('text_primary')
         ).pack(anchor="w")
 
         ctk.CTkLabel(
-            title_box,
-            text="Görünüm temasını, Fluent animasyon düzeyini, sistem başlangıcını ve masaüstü korumasını yapılandırın",
-            font=ctk.CTkFont(size=13),
+            title_col,
+            text="Windows 11 DWM cam şeffaflığını, görünüm temasını, animasyon düzeyini ve güvenlik tercihlerini yönetin",
+            font=ctk.CTkFont(size=12),
             text_color=c('text_secondary')
         ).pack(anchor="w")
 
-        scroll = ctk.CTkScrollableFrame(self, fg_color=c('bg_mica'))
-        scroll.pack(fill="both", expand=True, padx=16, pady=(0, 10))
+        scroll = ctk.CTkScrollableFrame(
+            self,
+            fg_color=c('bg_mica'),
+            scrollbar_button_color=c('border'),
+            scrollbar_button_hover_color=c('accent')
+        )
+        scroll.pack(fill="both", expand=True, padx=12, pady=(0, 8))
         try:
             scroll._parent_canvas.configure(yscrollincrement=4)
         except Exception:
             pass
 
-        # 1. Kart: Tema ve Görünüm
-        theme_card = ctk.CTkFrame(scroll, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border'))
-        theme_card.pack(fill="x", pady=6)
-        FluidAnimator.bind_card_hover(theme_card, self.theme_mode)
+        # 1. Kart: Cam Şeffaflığı (Acrylic Glass Transparency) ve Tema
+        glass_card = ctk.CTkFrame(scroll, fg_color=c('bg_card'), corner_radius=14, border_width=1, border_color=c('border'))
+        glass_card.pack(fill="x", pady=6, padx=4)
+        FluidAnimator.bind_card_hover(glass_card, self.theme_mode)
 
-        inner_t = ctk.CTkFrame(theme_card, fg_color="transparent")
-        inner_t.pack(fill="x", padx=16, pady=14)
+        inner_g = ctk.CTkFrame(glass_card, fg_color="transparent")
+        inner_g.pack(fill="x", padx=18, pady=16)
 
-        ctk.CTkLabel(inner_t, text="🎨 Uygulama Teması (Fluent Theme)", font=ctk.CTkFont(size=14, weight="bold"), text_color=c('text_primary')).pack(side="left")
+        ctk.CTkLabel(
+            inner_g,
+            text="💎 Windows 11 Cam Şeffaflığı (Acrylic Glass) ve Görünüm",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color=c('text_primary')
+        ).pack(anchor="w", pady=(0, 10))
+
+        # Tema Satırı
+        row_t = ctk.CTkFrame(inner_g, fg_color="transparent")
+        row_t.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkLabel(row_t, text="🎨 Görsel Cam Teması", font=ctk.CTkFont(size=13, weight="bold"), text_color=c('text_primary')).pack(side="left")
 
         self.theme_menu = ctk.CTkOptionMenu(
-            inner_t,
-            values=["Koyu (Dark)", "Açık (Light)"],
-            width=170,
-            height=30,
-            corner_radius=6,
+            row_t,
+            values=["Gece Camı (Midnight Glass)", "Kristal Açık (Crystal Light)"],
+            width=235,
+            height=32,
+            corner_radius=8,
+            fg_color=c('bg_card_secondary'),
+            button_color=c('accent'),
+            button_hover_color=c('accent_hover'),
+            text_color=c('text_primary'),
             command=self._on_theme_change
         )
         self.theme_menu.pack(side="right")
-        self.theme_menu.set("Açık (Light)" if self.theme_mode == 'light' else "Koyu (Dark)")
+        self.theme_menu.set("Kristal Açık (Crystal Light)" if self.theme_mode == 'light' else "Gece Camı (Midnight Glass)")
 
-        # 2. Kart: Animasyon ve Erişilebilirlik (Motion & Accessibility)
-        motion_card = ctk.CTkFrame(scroll, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border'))
-        motion_card.pack(fill="x", pady=6)
+        # Şeffaflık Kaydırıcısı Satırı
+        row_op = ctk.CTkFrame(inner_g, fg_color="transparent")
+        row_op.pack(fill="x", pady=4)
+
+        cur_op = float(self.app.cfg.get('glass_opacity', 0.95))
+        self.lbl_op_val = ctk.CTkLabel(
+            row_op,
+            text=f"Pencere Cam Opaklığı (Masaüstü Arka Plan Geçirgenliği): %{int(round(cur_op * 100))}",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=c('accent_light')
+        )
+        self.lbl_op_val.pack(side="left")
+
+        self.op_slider = ctk.CTkSlider(
+            row_op,
+            from_=0.85,
+            to=1.00,
+            number_of_steps=15,
+            width=235,
+            progress_color=c('accent'),
+            button_color=c('accent_light'),
+            button_hover_color=c('accent_hover'),
+            command=self._on_opacity_slider
+        )
+        self.op_slider.set(cur_op)
+        self.op_slider.pack(side="right")
+
+        # 2. Kart: Animasyon ve Erişilebilirlik
+        motion_card = ctk.CTkFrame(scroll, fg_color=c('bg_card'), corner_radius=14, border_width=1, border_color=c('border'))
+        motion_card.pack(fill="x", pady=6, padx=4)
         FluidAnimator.bind_card_hover(motion_card, self.theme_mode)
 
         inner_m = ctk.CTkFrame(motion_card, fg_color="transparent")
-        inner_m.pack(fill="x", padx=16, pady=14)
+        inner_m.pack(fill="x", padx=18, pady=16)
 
         ctk.CTkLabel(
             inner_m,
-            text="✨ Animasyon ve Hareket Tercihleri (Motion & Accessibility)",
-            font=ctk.CTkFont(size=14, weight="bold"),
+            text="✨ Animasyon ve Hareket Tercihleri (Fluent Motion & Accessibility)",
+            font=ctk.CTkFont(size=15, weight="bold"),
             text_color=c('text_primary')
         ).pack(anchor="w", pady=(0, 8))
 
@@ -89,7 +159,7 @@ class SettingsView(ctk.CTkFrame):
         anim_text_box = ctk.CTkFrame(row_anim, fg_color="transparent")
         anim_text_box.pack(side="left")
         ctk.CTkLabel(anim_text_box, text="Arayüz Animasyon Düzeyi", font=ctk.CTkFont(size=13, weight="bold"), text_color=c('text_primary')).pack(anchor="w")
-        ctk.CTkLabel(anim_text_box, text="Sayfa geçişleri, sayaçlar, kart efektleri ve bildirim animasyonlarının yoğunluğu.", font=ctk.CTkFont(size=11), text_color=c('text_secondary')).pack(anchor="w")
+        ctk.CTkLabel(anim_text_box, text="Sayfa geçişleri, cam kart parlamaları, sayaçlar ve bildirim animasyonları.", font=ctk.CTkFont(size=11), text_color=c('text_secondary')).pack(anchor="w")
 
         self.anim_menu = ctk.CTkOptionMenu(
             row_anim,
@@ -99,8 +169,12 @@ class SettingsView(ctk.CTkFrame):
                 "Devre Dışı (Disabled)"
             ],
             width=235,
-            height=30,
-            corner_radius=6,
+            height=32,
+            corner_radius=8,
+            fg_color=c('bg_card_secondary'),
+            button_color=c('accent'),
+            button_hover_color=c('accent_hover'),
+            text_color=c('text_primary'),
             command=self._on_animation_mode_change
         )
         self.anim_menu.pack(side="right")
@@ -117,6 +191,7 @@ class SettingsView(ctk.CTkFrame):
             inner_m,
             text="Windows 'Azaltılmış Hareket' (Accessibility) ayarını otomatik izle",
             font=ctk.CTkFont(size=12),
+            progress_color=c('accent'),
             command=self._on_sys_motion_toggle
         )
         self.sw_sys_motion.pack(anchor="w", pady=(8, 2))
@@ -124,17 +199,20 @@ class SettingsView(ctk.CTkFrame):
             self.sw_sys_motion.select()
 
         # 3. Kart: Sistem ve Bildirimler
-        sys_card = ctk.CTkFrame(scroll, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border'))
-        sys_card.pack(fill="x", pady=6)
+        sys_card = ctk.CTkFrame(scroll, fg_color=c('bg_card'), corner_radius=14, border_width=1, border_color=c('border'))
+        sys_card.pack(fill="x", pady=6, padx=4)
         FluidAnimator.bind_card_hover(sys_card, self.theme_mode)
 
         inner_s = ctk.CTkFrame(sys_card, fg_color="transparent")
-        inner_s.pack(fill="x", padx=16, pady=14)
+        inner_s.pack(fill="x", padx=18, pady=16)
+
+        ctk.CTkLabel(inner_s, text="🚀 Sistem Entegrasyonu ve Otomasyon Davranışı", font=ctk.CTkFont(size=15, weight="bold"), text_color=c('text_primary')).pack(anchor="w", pady=(0, 8))
 
         self.sw_startup = ctk.CTkSwitch(
             inner_s,
             text="Windows Başlangıcında Otomatik Çalıştır (Arka Planda)",
             font=ctk.CTkFont(size=13),
+            progress_color=c('accent'),
             command=self._on_startup_toggle
         )
         self.sw_startup.pack(anchor="w", pady=6)
@@ -143,8 +221,9 @@ class SettingsView(ctk.CTkFrame):
 
         self.sw_notif = ctk.CTkSwitch(
             inner_s,
-            text="Uygulama İçi Akıllı Bildirimleri (Toast) Göster",
+            text="Uygulama İçi Akıllı Cam Bildirimlerini (Toast) Göster",
             font=ctk.CTkFont(size=13),
+            progress_color=c('accent'),
             command=self._on_notif_toggle
         )
         self.sw_notif.pack(anchor="w", pady=6)
@@ -155,6 +234,7 @@ class SettingsView(ctk.CTkFrame):
             inner_s,
             text="AI Motorunun Alt Klasörleri Otomatik Oluşturmasına İzin Ver",
             font=ctk.CTkFont(size=13),
+            progress_color=c('accent'),
             command=self._on_new_cat_toggle
         )
         self.sw_new_cat.pack(anchor="w", pady=6)
@@ -162,19 +242,19 @@ class SettingsView(ctk.CTkFrame):
             self.sw_new_cat.select()
 
         # 4. Kart: Masaüstü Koruma Yönetimi
-        base_card = ctk.CTkFrame(scroll, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border'))
-        base_card.pack(fill="x", pady=6)
+        base_card = ctk.CTkFrame(scroll, fg_color=c('bg_card'), corner_radius=14, border_width=1, border_color=c('border'))
+        base_card.pack(fill="x", pady=6, padx=4)
         FluidAnimator.bind_card_hover(base_card, self.theme_mode)
 
         inner_b = ctk.CTkFrame(base_card, fg_color="transparent")
-        inner_b.pack(fill="x", padx=16, pady=14)
+        inner_b.pack(fill="x", padx=18, pady=16)
 
         left_b = ctk.CTkFrame(inner_b, fg_color="transparent")
         left_b.pack(side="left")
 
         ctk.CTkLabel(
             left_b,
-            text="🛡️ Masaüstü Koruma Listesini Güncelle",
+            text="🛡️ Masaüstü Koruma Kalkanını Güncelle",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color=c('text_primary')
         ).pack(anchor="w")
@@ -182,7 +262,7 @@ class SettingsView(ctk.CTkFrame):
         baseline_cnt = len(self.app.cfg.get('desktop_baseline', []))
         self.lbl_base_info = ctk.CTkLabel(
             left_b,
-            text=f"Şu an masaüstünüzdeki {baseline_cnt} mevcut dosya/klasör taşınmaya karşı korumalıdır.",
+            text=f"Şu an masaüstünüzdeki {baseline_cnt} mevcut dosya/klasör taşınmaya karşı kilitlidir ve korunmaktadır.",
             font=ctk.CTkFont(size=12),
             text_color=c('text_secondary')
         )
@@ -194,27 +274,28 @@ class SettingsView(ctk.CTkFrame):
             font=ctk.CTkFont(size=12, weight="bold"),
             fg_color=c('accent'),
             hover_color=c('accent_hover'),
-            height=32,
-            corner_radius=6,
+            text_color="#FFFFFF",
+            height=34,
+            corner_radius=8,
             command=self._refresh_baseline
         ).pack(side="right")
 
         # 5. Kart: Klavye Kısayolları Rehberi
-        kb_card = ctk.CTkFrame(scroll, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border'))
-        kb_card.pack(fill="x", pady=6)
+        kb_card = ctk.CTkFrame(scroll, fg_color=c('bg_card'), corner_radius=14, border_width=1, border_color=c('border'))
+        kb_card.pack(fill="x", pady=6, padx=4)
         FluidAnimator.bind_card_hover(kb_card, self.theme_mode)
 
         inner_kb = ctk.CTkFrame(kb_card, fg_color="transparent")
-        inner_kb.pack(fill="x", padx=16, pady=12)
+        inner_kb.pack(fill="x", padx=18, pady=14)
 
-        ctk.CTkLabel(inner_kb, text="⌨️ Klavye Kısayolları ve Hızlı Etkileşim", font=ctk.CTkFont(size=14, weight="bold"), text_color=c('text_primary')).pack(anchor="w", pady=(0, 6))
+        ctk.CTkLabel(inner_kb, text="⌨️ Klavye Kısayolları ve Hızlı Etkileşim", font=ctk.CTkFont(size=14, weight="bold"), text_color=c('text_primary')).pack(anchor="w", pady=(0, 8))
 
         shortcuts = [
             ("Ctrl + K", "Hızlı Komut Paletini (Command Palette) açar / kapatır"),
             ("Ctrl + F", "Üst bardaki genel arama kutusuna odaklanır"),
             ("F5", "Aktif sayfanın verilerini ve önbelleğini anında yeniler"),
             ("Esc", "Açık olan Komut Paleti, Bildirim Merkezi veya Bağlam Menüsünü kapatır"),
-            ("Sağ Tık", "Dosya ve klasör satırlarında hızlı işlem menüsünü açar")
+            ("Sağ Tık", "Dosya ve klasör satırlarında yarı-saydam hızlı işlem menüsünü açar")
         ]
         for key_combo, desc in shortcuts:
             r = ctk.CTkFrame(inner_kb, fg_color="transparent")
@@ -224,38 +305,22 @@ class SettingsView(ctk.CTkFrame):
                 text=key_combo,
                 font=ctk.CTkFont(size=11, weight="bold"),
                 text_color=c('accent_light'),
-                fg_color=c('bg_secondary'),
-                corner_radius=4,
-                width=90,
+                fg_color=c('bg_card_secondary'),
+                corner_radius=5,
+                width=94,
                 padx=6,
                 pady=2
             ).pack(side="left", padx=(0, 10))
             ctk.CTkLabel(r, text=desc, font=ctk.CTkFont(size=12), text_color=c('text_secondary')).pack(side="left")
 
-        # 6. Kart: Hakkında
-        about_card = ctk.CTkFrame(scroll, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border'))
-        about_card.pack(fill="x", pady=6)
-
-        inner_a = ctk.CTkFrame(about_card, fg_color="transparent")
-        inner_a.pack(fill="x", padx=16, pady=12)
-
-        ctk.CTkLabel(
-            inner_a,
-            text=f"Smart File Organizer v{APP_VERSION} — Windows 11 Fluent Motion & AI File Intelligence System",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            text_color=c('accent_light')
-        ).pack(anchor="w")
-
-        ctk.CTkLabel(
-            inner_a,
-            text="Masaüstünüzdeki Folders yapısını bozmadan dosyalarınızı yapay zekâ ve içerik analiziyle korur.",
-            font=ctk.CTkFont(size=11),
-            text_color=c('text_muted')
-        ).pack(anchor="w")
-
     def _on_theme_change(self, val):
-        mode = 'light' if "Açık" in val else 'dark'
+        mode = 'light' if ("Kristal" in val or "Açık" in val) else 'dark'
         self.app.change_theme(mode)
+
+    def _on_opacity_slider(self, val):
+        pct = int(round(float(val) * 100))
+        self.lbl_op_val.configure(text=f"Pencere Cam Opaklığı (Masaüstü Arka Plan Geçirgenliği): %{pct}")
+        self.app.set_glass_opacity(val)
 
     def _on_animation_mode_change(self, val):
         if "Azaltılmış" in val:
@@ -297,5 +362,5 @@ class SettingsView(ctk.CTkFrame):
 
     def _refresh_baseline(self):
         cnt = refresh_desktop_baseline(self.app.cfg)
-        self.lbl_base_info.configure(text=f"Şu an masaüstünüzdeki {cnt} mevcut dosya/klasör taşınmaya karşı korumalıdır.")
+        self.lbl_base_info.configure(text=f"Şu an masaüstünüzdeki {cnt} mevcut dosya/klasör taşınmaya karşı kilitlidir ve korunmaktadır.")
         messagebox.showinfo("Güncellendi", f"Masaüstünüzdeki mevcut {cnt} öğe koruma listesine kaydedildi.")

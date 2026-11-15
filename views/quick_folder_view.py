@@ -1,8 +1,8 @@
 """
-Windows 11 Fluent Pinned Folder View (Hızlı Erişim Klasör Görünümü) (V2.1)
+Windows 11 Fluent Glass Pinned Folder Explorer (V2.1 — Premium Glass Edition)
 Displays Desktop, Downloads, Documents, Pictures, Music, and Videos
-with real-time file listing, native icons, baseline protection status,
-right-click context menus, hover micro-interactions, pagination for large folders,
+with real-time file listing, native shell icons, file-type glass badges,
+live folder search filter, baseline protection shield, right-click context menu,
 and 1-click intelligent organization into Desktop/Folders.
 """
 
@@ -31,7 +31,7 @@ FOLDER_META = {
         'name': 'Masaüstü',
         'path': DEFAULT_DESKTOP,
         'is_desktop': True,
-        'desc': 'Masaüstü çalışma alanı. Önceden var olan kısayol ve klasörleriniz korunur.'
+        'desc': 'Masaüstü çalışma alanı. Önceden var olan kısayol ve klasörleriniz kilitlidir ve korunur.'
     },
     'downloads': {
         'name': 'İndirilenler',
@@ -77,6 +77,7 @@ class QuickFolderView(ctk.CTkFrame):
         self.folder_path = self.meta['path']
         self.theme_mode = self.app.theme_mode
         self._display_limit = self.PAGE_SIZE
+        self._filter_query = ""
 
         self._folder_icon = None
         self._load_icon()
@@ -85,9 +86,9 @@ class QuickFolderView(ctk.CTkFrame):
 
     def _load_icon(self):
         try:
-            pil_img = ThumbnailEngine._extract_shell_image(self.folder_path, 32, 32)
+            pil_img = ThumbnailEngine._extract_shell_image(self.folder_path, 36, 36)
             if pil_img:
-                self._folder_icon = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(32, 32))
+                self._folder_icon = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(34, 34))
         except Exception:
             self._folder_icon = None
 
@@ -104,36 +105,65 @@ class QuickFolderView(ctk.CTkFrame):
     def _build_ui(self):
         c = lambda token: FluentTheme.c(token, self.theme_mode)
 
-        # Üst Başlık ve Aksiyon Çubuğu
-        header = ctk.CTkFrame(self, fg_color="transparent")
-        header.pack(fill="x", padx=16, pady=(10, 10))
+        # 1. Üst Buzlu Cam Klasör Başlık Kartı
+        header_card = ctk.CTkFrame(
+            self,
+            fg_color=c('bg_card'),
+            corner_radius=14,
+            border_width=1,
+            border_color=c('border')
+        )
+        header_card.pack(fill="x", padx=12, pady=(6, 10))
+        FluidAnimator.bind_card_hover(header_card, self.theme_mode)
+
+        header = ctk.CTkFrame(header_card, fg_color="transparent")
+        header.pack(fill="x", padx=18, pady=14)
 
         left_box = ctk.CTkFrame(header, fg_color="transparent")
         left_box.pack(side="left")
 
         if self._folder_icon:
             lbl_ic = ctk.CTkLabel(left_box, text="", image=self._folder_icon)
-            lbl_ic.pack(side="left", padx=(0, 10))
+            lbl_ic.pack(side="left", padx=(0, 12))
         else:
-            lbl_ic = ctk.CTkLabel(left_box, text="📁", font=ctk.CTkFont(size=26))
-            lbl_ic.pack(side="left", padx=(0, 10))
+            lbl_ic = ctk.CTkLabel(left_box, text="📁", font=ctk.CTkFont(size=28))
+            lbl_ic.pack(side="left", padx=(0, 12))
 
         title_inner = ctk.CTkFrame(left_box, fg_color="transparent")
         title_inner.pack(side="left")
 
+        top_title_row = ctk.CTkFrame(title_inner, fg_color="transparent")
+        top_title_row.pack(anchor="w")
+
         ctk.CTkLabel(
-            title_inner,
+            top_title_row,
             text=f"{self.meta['name']} 📌",
-            font=ctk.CTkFont(size=22, weight="bold"),
+            font=ctk.CTkFont(family="Segoe UI Variable Display", size=21, weight="bold"),
             text_color=c('text_primary')
-        ).pack(anchor="w")
+        ).pack(side="left")
+
+        is_monitored = any(os.path.normpath(s).lower() == os.path.normpath(self.folder_path).lower() for s in self.app.cfg.get('sources', []))
+        status_txt = "🟢 CANLI İZLENİYOR" if is_monitored else "⚪ İZLEME DIŞI"
+        status_clr = c('success') if is_monitored else c('text_muted')
+        status_bg = c('success_bg') if is_monitored else c('bg_card_secondary')
+
+        ctk.CTkLabel(
+            top_title_row,
+            text=status_txt,
+            font=ctk.CTkFont(size=9, weight="bold"),
+            text_color=status_clr,
+            fg_color=status_bg,
+            corner_radius=5,
+            padx=8,
+            pady=2
+        ).pack(side="left", padx=10)
 
         ctk.CTkLabel(
             title_inner,
-            text=self.meta['desc'],
-            font=ctk.CTkFont(size=12),
+            text=f"{self.meta['desc']}  •  📍 {self.folder_path}",
+            font=ctk.CTkFont(size=11),
             text_color=c('text_secondary')
-        ).pack(anchor="w")
+        ).pack(anchor="w", pady=(2, 0))
 
         # Sağ Aksiyon Butonları
         btn_box = ctk.CTkFrame(header, fg_color="transparent")
@@ -145,6 +175,7 @@ class QuickFolderView(ctk.CTkFrame):
             font=ctk.CTkFont(size=12, weight="bold"),
             fg_color=c('accent'),
             hover_color=c('accent_hover'),
+            text_color="#FFFFFF",
             height=34,
             corner_radius=8,
             command=self._organize_folder_items
@@ -154,10 +185,12 @@ class QuickFolderView(ctk.CTkFrame):
         ctk.CTkButton(
             btn_box,
             text="📂 Gezginde Aç",
-            font=ctk.CTkFont(size=12),
-            fg_color=c('bg_card'),
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=c('bg_card_secondary'),
             hover_color=c('bg_card_hover'),
             text_color=c('text_primary'),
+            border_width=1,
+            border_color=c('border'),
             height=34,
             corner_radius=8,
             command=lambda: os.startfile(self.folder_path) if os.path.exists(self.folder_path) else None
@@ -165,76 +198,76 @@ class QuickFolderView(ctk.CTkFrame):
 
         ctk.CTkButton(
             btn_box,
-            text="🔄 Yenile",
-            font=ctk.CTkFont(size=12),
-            fg_color=c('bg_card'),
+            text="🔄",
+            width=36,
+            font=ctk.CTkFont(size=13),
+            fg_color=c('bg_card_secondary'),
             hover_color=c('bg_card_hover'),
             text_color=c('text_primary'),
+            border_width=1,
+            border_color=c('border'),
             height=34,
             corner_radius=8,
             command=self._refresh_content
         ).pack(side="right", padx=4)
 
-        # Masaüstü Koruma Bilgi Kartı (Sadece Masaüstü için)
+        # 2. Masaüstü Koruma Kalkanı & Klasör İçi Filtre Çubuğu
+        sub_bar = ctk.CTkFrame(self, fg_color="transparent")
+        sub_bar.pack(fill="x", padx=12, pady=(0, 8))
+
+        self.filter_entry = ctk.CTkEntry(
+            sub_bar,
+            placeholder_text=f"🔍 {self.meta['name']} içinde dosya filtrele...",
+            font=ctk.CTkFont(size=12),
+            fg_color=c('bg_input'),
+            border_color=c('border'),
+            text_color=c('text_primary'),
+            width=280,
+            height=32,
+            corner_radius=8
+        )
+        self.filter_entry.pack(side="left")
+        self.filter_entry.bind("<KeyRelease>", self._on_filter_change)
+        FluidAnimator.bind_input_focus(self.filter_entry, self.theme_mode)
+
         if self.meta.get('is_desktop'):
-            protect_card = ctk.CTkFrame(
-                self,
-                fg_color=c('bg_card'),
-                corner_radius=8,
-                border_width=1,
-                border_color=c('border')
-            )
-            protect_card.pack(fill="x", padx=16, pady=(0, 8))
-
-            p_inner = ctk.CTkFrame(protect_card, fg_color="transparent")
-            p_inner.pack(fill="x", padx=14, pady=8)
-
-            ctk.CTkLabel(
-                p_inner,
-                text="🛡️ Masaüstü Koruma Modu Aktif",
-                font=ctk.CTkFont(size=12, weight="bold"),
-                text_color=c('success')
-            ).pack(side="left")
-
             baseline_count = len(self.app.cfg.get('desktop_baseline', []))
             ctk.CTkLabel(
-                p_inner,
-                text=f"— Önceden mevcut olan {baseline_count} öğe (kısayollar, uygulamalar) kilitlidir. Yalnızca yeni indirilen veya kaydedilen dosyalar organize edilir.",
+                sub_bar,
+                text=f"🛡️ Masaüstü Koruma Kalkanı Aktif: Mevcut {baseline_count} kısayol/klasör kilitli",
+                font=ctk.CTkFont(size=11, weight="bold"),
+                text_color=c('success'),
+                fg_color=c('success_bg'),
+                corner_radius=7,
+                padx=12,
+                pady=4
+            ).pack(side="right")
+        else:
+            ctk.CTkLabel(
+                sub_bar,
+                text="💡 İpucu: Hızlı bağlam menüsü için herhangi bir dosya satırına sağ tıklayın",
                 font=ctk.CTkFont(size=11),
-                text_color=c('text_secondary')
-            ).pack(side="left", padx=8)
+                text_color=c('text_muted')
+            ).pack(side="right")
 
-        # Bilgi Barı (Konum ve Durum)
-        info_bar = ctk.CTkFrame(self, fg_color="transparent")
-        info_bar.pack(fill="x", padx=16, pady=(0, 6))
-
-        is_monitored = any(os.path.normpath(s).lower() == os.path.normpath(self.folder_path).lower() for s in self.app.cfg.get('sources', []))
-        status_txt = "🟢 Arka Planda Otomatik İzleniyor" if is_monitored else "⚪ İzleme Dışı"
-        status_clr = c('success') if is_monitored else c('text_muted')
-
-        ctk.CTkLabel(
-            info_bar,
-            text=f"📍 {self.folder_path}",
-            font=ctk.CTkFont(size=11),
-            text_color=c('text_muted')
-        ).pack(side="left")
-
-        ctk.CTkLabel(
-            info_bar,
-            text=f"•   {status_txt}   •   💡 Hızlı menü için satırlara sağ tıklayın",
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color=status_clr
-        ).pack(side="left", padx=8)
-
-        # İçerik Alanı (Scrollable Frame - Solid Mica Background)
-        self.scroll = ctk.CTkScrollableFrame(self, fg_color=c('bg_mica'))
-        self.scroll.pack(fill="both", expand=True, padx=16, pady=(0, 10))
+        # 3. İçerik Alanı
+        self.scroll = ctk.CTkScrollableFrame(
+            self,
+            fg_color=c('bg_mica'),
+            scrollbar_button_color=c('border'),
+            scrollbar_button_hover_color=c('accent')
+        )
+        self.scroll.pack(fill="both", expand=True, padx=12, pady=(0, 6))
         try:
             self.scroll._parent_canvas.configure(yscrollincrement=4)
         except Exception:
             pass
 
         self._render_files()
+
+    def _on_filter_change(self, _event=None):
+        self._filter_query = self.filter_entry.get().strip().lower()
+        self._refresh_content()
 
     def _refresh_content(self):
         for w in self.scroll.winfo_children():
@@ -277,6 +310,8 @@ class QuickFolderView(ctk.CTkFrame):
         for item in items:
             if item.lower() in ignored_names or item.startswith('.'):
                 continue
+            if self._filter_query and self._filter_query not in item.lower():
+                continue
             item_path = os.path.join(self.folder_path, item)
             is_file = os.path.isfile(item_path)
 
@@ -287,52 +322,42 @@ class QuickFolderView(ctk.CTkFrame):
             else:
                 protected_items.append((item, item_path, is_file, False))
 
-        # 1. Organize Edilmeye Hazır Dosyalar Bölümü
         if organizable_files:
             sec_header = ctk.CTkFrame(self.scroll, fg_color="transparent")
             sec_header.pack(fill="x", pady=(4, 6))
 
             ctk.CTkLabel(
                 sec_header,
-                text=f"⚡ Organize Edilecek Dosyalar ({len(organizable_files)})",
+                text=f"⚡ Organize Edilecek Yeni Dosyalar ({len(organizable_files)})",
                 font=ctk.CTkFont(size=13, weight="bold"),
                 text_color=c('accent_light')
             ).pack(side="left")
 
-            ctk.CTkLabel(
-                sec_header,
-                text="Bu dosyalar Folders klasörüne taşınabilir",
-                font=ctk.CTkFont(size=11),
-                text_color=c('text_secondary')
-            ).pack(side="left", padx=8)
-
-            shown_org = organizable_files[:self._display_limit]
-            for name, path, is_file, _ in shown_org:
+            for name, path, is_file, _ in organizable_files[:self._display_limit]:
                 self._create_file_row(self.scroll, name, path, is_file, can_organize=True, c=c)
         else:
             empty_box = ctk.CTkFrame(
                 self.scroll,
                 fg_color=c('bg_card'),
-                corner_radius=10,
+                corner_radius=12,
                 border_width=1,
-                border_color=c('border_subtle')
+                border_color=c('border')
             )
             empty_box.pack(fill="x", pady=(4, 12))
 
             ctk.CTkLabel(
                 empty_box,
-                text=f"✨ {self.meta['name']} klasörü düzenli ve tertemiz!\nOtomatik izleme aktif: Bu klasöre gelen yeni dosyalar anında Desktop/Folders klasörüne organize edilir.",
+                text=f"✨ {self.meta['name']} klasöründe bekleyen dağınık dosya yok!\nOtomatik izleme aktif: Bu klasöre gelen yeni dosyalar anında Desktop/Folders klasörüne organize edilir.",
                 font=ctk.CTkFont(size=12),
                 text_color=c('text_secondary'),
                 justify="center"
             ).pack(padx=20, pady=16)
 
-        # 2. Korunan veya Sabit Öğeler Bölümü
         if protected_items:
             sec_prot = ctk.CTkFrame(self.scroll, fg_color="transparent")
-            sec_prot.pack(fill="x", pady=(12, 6))
+            sec_prot.pack(fill="x", pady=(10, 6))
 
-            title = "🛡️ Korunan Masaüstü Öğeleri" if self.meta.get('is_desktop') else "📁 Mevcut Klasörler ve Öğeler"
+            title = "🛡️ Korunan Masaüstü Öğeleri" if self.meta.get('is_desktop') else "📁 Mevcut Alt Klasörler ve Öğeler"
             ctk.CTkLabel(
                 sec_prot,
                 text=f"{title} ({len(protected_items)})",
@@ -340,8 +365,7 @@ class QuickFolderView(ctk.CTkFrame):
                 text_color=c('text_secondary')
             ).pack(side="left")
 
-            shown_prot = protected_items[:self._display_limit]
-            for name, path, is_file, is_base in shown_prot:
+            for name, path, is_file, is_base in protected_items[:self._display_limit]:
                 self._create_file_row(self.scroll, name, path, is_file, can_organize=False, is_baseline=is_base, c=c)
 
         total_items = len(organizable_files) + len(protected_items)
@@ -362,7 +386,7 @@ class QuickFolderView(ctk.CTkFrame):
         row = ctk.CTkFrame(
             parent,
             fg_color=c('bg_card'),
-            corner_radius=8,
+            corner_radius=10,
             border_width=1,
             border_color=c('border')
         )
@@ -370,28 +394,24 @@ class QuickFolderView(ctk.CTkFrame):
         FluidAnimator.bind_card_hover(row, self.theme_mode)
 
         inner = ctk.CTkFrame(row, fg_color="transparent")
-        inner.pack(fill="x", padx=10, pady=6)
+        inner.pack(fill="x", padx=12, pady=7)
 
-        icon_char = "📄" if is_file else "📁"
-        _, ext = os.path.splitext(name.lower())
-        if ext in ['.png', '.jpg', '.jpeg', '.webp']:
-            icon_char = "🖼️"
-        elif ext in ['.mp4', '.mkv', '.avi', '.mov']:
-            icon_char = "🎬"
-        elif ext in ['.mp3', '.wav', '.flac']:
-            icon_char = "🎵"
-        elif ext in ['.zip', '.rar', '.7z']:
-            icon_char = "🗄️"
-        elif ext in ['.exe', '.msi']:
-            icon_char = "⚙️"
-        elif ext in ['.lnk']:
-            icon_char = "🔗"
+        if is_file:
+            badge_txt, icon_char, badge_fg, badge_bg = FluentTheme.file_badge_style(name, self.theme_mode)
+        else:
+            badge_txt, icon_char, badge_fg, badge_bg = ("DIR", "📁", c('accent_light'), c('accent_subtle'))
 
         ctk.CTkLabel(
             inner,
-            text=icon_char,
-            font=ctk.CTkFont(size=15)
-        ).pack(side="left", padx=(0, 8))
+            text=f"{icon_char} {badge_txt}",
+            font=ctk.CTkFont(size=10, weight="bold"),
+            text_color=badge_fg,
+            fg_color=badge_bg,
+            corner_radius=6,
+            width=54,
+            padx=6,
+            pady=3
+        ).pack(side="left", padx=(0, 10))
 
         info_box = ctk.CTkFrame(inner, fg_color="transparent")
         info_box.pack(side="left", fill="x", expand=True)
@@ -430,15 +450,16 @@ class QuickFolderView(ctk.CTkFrame):
                 font=ctk.CTkFont(size=11, weight="bold"),
                 fg_color=c('accent'),
                 hover_color=c('accent_hover'),
-                width=100,
+                text_color="#FFFFFF",
+                width=104,
                 height=28,
-                corner_radius=6,
+                corner_radius=7,
                 command=lambda p=path: self._organize_single(p)
             ).pack(side="right")
         elif is_baseline:
             ctk.CTkLabel(
                 inner,
-                text="🛡️ Korunuyor",
+                text="🛡️ Kilitli",
                 font=ctk.CTkFont(size=10, weight="bold"),
                 text_color=c('success'),
                 fg_color=c('success_bg'),
@@ -449,14 +470,16 @@ class QuickFolderView(ctk.CTkFrame):
         else:
             ctk.CTkButton(
                 inner,
-                text="Aç",
-                font=ctk.CTkFont(size=11),
-                fg_color=c('bg_input'),
+                text="📂 Aç",
+                font=ctk.CTkFont(size=11, weight="bold"),
+                fg_color=c('bg_card_secondary'),
                 hover_color=c('bg_card_hover'),
                 text_color=c('text_primary'),
-                width=50,
+                border_width=1,
+                border_color=c('border'),
+                width=58,
                 height=26,
-                corner_radius=6,
+                corner_radius=7,
                 command=lambda p=path: os.startfile(p) if os.path.exists(p) else None
             ).pack(side="right")
 

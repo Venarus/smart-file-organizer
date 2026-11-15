@@ -49,6 +49,7 @@ DEFAULT_CONFIG = {
     'run_on_startup': False,
     'check_interval': 4,
     'theme': 'dark',                  # 'dark', 'light', 'system'
+    'glass_opacity': 0.95,            # 0.85 - 1.00 Pencere Acrylic/Cam şeffaflığı
     'animation_mode': 'full',         # 'full', 'reduced', 'disabled'
     'respect_system_motion': True,    # Windows erişilebilirlik azaltılmış hareket ayarını izle
     'notifications': True,
