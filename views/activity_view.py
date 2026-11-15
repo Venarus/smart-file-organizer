@@ -124,6 +124,9 @@ class ActivityView(ctk.CTkFrame):
         self._display_limit += self.PAGE_SIZE
         self._render_list()
 
+    def refresh(self):
+        self._render_list()
+
     def _render_list(self):
         c = lambda token: FluentTheme.c(token, self.theme_mode)
         f = FluentTheme.font
@@ -162,6 +165,7 @@ class ActivityView(ctk.CTkFrame):
                 height=44
             )
             card.pack(fill="x", pady=2)
+            card.pack_propagate(False)
             FluidAnimator.bind_card_hover(card, self.theme_mode)
 
             is_undone = tx.get('status') == 'undone'
@@ -202,7 +206,7 @@ class ActivityView(ctk.CTkFrame):
             ).pack(side="right", padx=12, pady=8)
 
             if tx.get('target_path'):
-                FluentContextMenu.bind_to_widget(card, tx['target_path'], self.app)
+                FluentContextMenu.bind_to_widget(card, tx['target_path'], self.app, on_refresh=self.refresh)
 
         def _on_done():
             if total_cnt > self._display_limit and self.scroll.winfo_exists():

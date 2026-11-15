@@ -131,9 +131,26 @@ class FluidAnimator:
     _active_jobs = {}      # {(widget_id, prop_key): (widget, after_id)}
     _chunk_jobs = {}       # {container_id: (container, after_id)}
     _active_hover_reset = None
+    _last_scroll_ts = 0.0  # Son fare tekerleği kaydırma zaman damgası
     _active_toasts = []    # Aktif toast bildirim pencereleri
     _last_toast_key = None
     _last_toast_time = 0.0
+
+    @classmethod
+    def notify_scroll(cls):
+        """Kaydırma (MouseWheel) sırasında hover yeniden çizimlerini bastırmak için zaman damgasını günceller."""
+        cls._last_scroll_ts = time.perf_counter()
+        if cls._active_hover_reset is not None:
+            try:
+                cls._active_hover_reset()
+            except Exception:
+                pass
+            cls._active_hover_reset = None
+
+    @classmethod
+    def is_scrolling(cls) -> bool:
+        """Son kaydırma olayından bu yana 120 ms geçmediyse True döner."""
+        return (time.perf_counter() - cls._last_scroll_ts) < 0.12
 
     @classmethod
     def set_animation_mode(cls, mode: str = None):
@@ -501,12 +518,21 @@ class FluidAnimator:
             state['hovered'] = False
             try:
                 if card_widget.winfo_exists():
+                    ctx = getattr(card_widget, '_ctx_data', None)
+                    if isinstance(ctx, dict) and ctx.get('file_path'):
+                        from file_ops import SelectionManager
+                        if SelectionManager.is_selected(ctx['file_path']):
+                            card_widget.configure(
+                                fg_color=FluentTheme.c('bg_card_active', theme_mode),
+                                border_color=FluentTheme.c('border_focus', theme_mode)
+                            )
+                            return
                     card_widget.configure(fg_color=normal_bg, border_color=normal_border)
             except Exception:
                 pass
 
         def _on_enter(_event=None):
-            if state['hovered']:
+            if state['hovered'] or cls.is_scrolling():
                 return
             if cls._active_hover_reset is not None and cls._active_hover_reset is not _force_reset:
                 try:

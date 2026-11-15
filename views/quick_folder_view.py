@@ -311,6 +311,9 @@ class QuickFolderView(ctk.CTkFrame):
                 return
         self._render_files_async()
 
+    def refresh(self):
+        self._refresh_content(force=True)
+
     def _load_more(self):
         self._display_limit += self.PAGE_SIZE
         self._refresh_content(force=True)
@@ -486,6 +489,7 @@ class QuickFolderView(ctk.CTkFrame):
             height=46
         )
         row.pack(fill="x", pady=2)
+        row.pack_propagate(False)
         FluidAnimator.bind_card_hover(row, self.theme_mode)
 
         if is_file:
@@ -563,7 +567,13 @@ class QuickFolderView(ctk.CTkFrame):
                 command=lambda p=path: os.startfile(p) if os.path.exists(p) else None
             ).pack(side="right", padx=12, pady=7)
 
-        FluentContextMenu.bind_to_widget(row, path, self.app, extra_actions=extra_menu)
+        FluentContextMenu.bind_to_widget(
+            row,
+            path,
+            self.app,
+            extra_actions=extra_menu,
+            on_refresh=self.refresh
+        )
 
     def _organize_single(self, file_path):
         target = self.app.cfg.get('target', DEFAULT_TARGET)

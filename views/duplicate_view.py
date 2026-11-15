@@ -6,6 +6,7 @@ from theme import FluentTheme
 from duplicate_manager import DuplicateManager
 from animation import FluidAnimator, UIBridge
 from notification_center import FluentContextMenu
+from file_ops import FileOperationManager
 
 class DuplicateView(ctk.CTkFrame):
     def __init__(self, master, app_controller):
@@ -209,6 +210,14 @@ class DuplicateView(ctk.CTkFrame):
         for w in self.scroll.winfo_children():
             w.destroy()
 
+        if not self.dup_data:
+            return
+
+        # Silinmiş dosyaları filtrele
+        for grp in list(self.dup_data.get('groups', [])):
+            grp['files'] = [f for f in grp['files'] if os.path.exists(f['path'])]
+        self.dup_data['groups'] = [g for g in self.dup_data.get('groups', []) if len(g['files']) > 1]
+
         groups = self.dup_data.get('groups', [])
         if not groups:
             ctk.CTkLabel(
@@ -249,8 +258,21 @@ class DuplicateView(ctk.CTkFrame):
             # Dosya listesi
             for idx, item in enumerate(grp['files']):
                 is_original = (idx == 0)
-                row = ctk.CTkFrame(group_card, fg_color=c('bg_card_secondary'), corner_radius=6)
+                row = ctk.CTkFrame(
+                    group_card,
+                    fg_color=c('bg_card_secondary'),
+                    corner_radius=6,
+                    border_width=1,
+                    border_color=c('border_subtle'),
+                    height=40
+                )
                 row.pack(fill="x", padx=14, pady=3)
+                row.pack_propagate(False)
+                FluidAnimator.bind_card_hover(
+                    row, self.theme_mode,
+                    normal_bg_token='bg_card_secondary',
+                    normal_border_token='border_subtle'
+                )
 
                 prefix = "👑 [ASIL]" if is_original else "📋 [KOPYA]"
                 badge_col = c('success') if is_original else c('warning')
@@ -281,11 +303,11 @@ class DuplicateView(ctk.CTkFrame):
                 if not is_original:
                     btn_del = ctk.CTkButton(
                         row,
-                        text="Sil",
+                        text="♻️ Sil",
                         font=ctk.CTkFont(size=11, weight="bold"),
                         fg_color=c('error'),
                         hover_color=c('accent_hover'),
-                        width=50,
+                        width=58,
                         height=26,
                         corner_radius=4,
                         command=lambda p=item['path'], g=grp: self._delete_copy(p, g)
@@ -300,19 +322,24 @@ class DuplicateView(ctk.CTkFrame):
                         width=60
                     ).pack(side="right", padx=(6, 10))
 
+                FluentContextMenu.bind_to_widget(
+                    row,
+                    item['path'],
+                    self.app,
+                    on_refresh=self.refresh,
+                    normal_bg_token='bg_card_secondary',
+                    normal_border_token='border_subtle'
+                )
+
             ctk.CTkFrame(group_card, fg_color="transparent", height=6).pack()
 
-    def _delete_copy(self, file_path, group):
-        if not messagebox.askyesno("Kopya Dosya Silme Onayı", f"Bu kopya dosyayı silmek istediğinizden emin misiniz?\n\n{file_path}"):
-            return
-
-        ok, msg = DuplicateManager.delete_file(file_path)
-        if ok:
-            messagebox.showinfo("Başarılı", "Kopya dosya başarıyla silindi.")
-            # Listeyi güncelle
-            group['files'] = [f for f in group['files'] if f['path'] != file_path]
-            if len(group['files']) <= 1:
-                self.dup_data['groups'] = [g for g in self.dup_data['groups'] if g['hash'] != group['hash']]
+    def refresh(self):
+        if self.dup_data:
             self._render_results()
-        else:
-            messagebox.showerror("Hata", f"Dosya silinemedi:\n{msg}")
+
+    def _delete_copy(self, file_path, group):
+        FileOperationManager.move_to_recycle_bin(
+            file_path,
+            app=self.app,
+            on_refresh=self.refresh
+        )

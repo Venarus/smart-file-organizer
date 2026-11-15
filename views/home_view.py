@@ -714,9 +714,11 @@ class HomeView(ctk.CTkFrame):
                 fg_color=c('bg_card_secondary'),
                 corner_radius=9,
                 border_width=1,
-                border_color=c('border_subtle')
+                border_color=c('border_subtle'),
+                height=38
             )
             row.pack(fill="x", pady=3)
+            row.pack_propagate(False)
             FluidAnimator.bind_card_hover(
                 row,
                 self.theme_mode,
@@ -760,4 +762,11 @@ class HomeView(ctk.CTkFrame):
             ).pack(side="right", padx=12)
 
             if entry.get('target_path'):
-                FluentContextMenu.bind_to_widget(row, entry['target_path'], self.app)
+                FluentContextMenu.bind_to_widget(
+                    row,
+                    entry['target_path'],
+                    self.app,
+                    on_refresh=lambda: self._populate_recent_list(c),
+                    normal_bg_token='bg_card_secondary',
+                    normal_border_token='border_subtle'
+                )

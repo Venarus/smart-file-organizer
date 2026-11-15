@@ -181,6 +181,10 @@ class SemanticSearchView(ctk.CTkFrame):
     def execute_search(self):
         self.perform_search()
 
+    def refresh(self):
+        if self.results:
+            self.perform_search()
+
     def perform_search(self):
         q = self.query_entry.get().strip()
         cat = self.cat_menu.get()
@@ -256,6 +260,7 @@ class SemanticSearchView(ctk.CTkFrame):
                 height=44
             )
             row.pack(fill="x", pady=2)
+            row.pack_propagate(False)
             FluidAnimator.bind_card_hover(row, self.theme_mode)
 
             badge_txt, icon_ch, badge_fg, badge_bg = FluentTheme.file_badge_style(item['name'], self.theme_mode)
@@ -326,7 +331,12 @@ class SemanticSearchView(ctk.CTkFrame):
                 command=lambda p=item['path']: SearchEngine.open_file(p)
             ).pack(side="right", padx=4, pady=8)
 
-            FluentContextMenu.bind_to_widget(row, item['path'], self.app)
+            FluentContextMenu.bind_to_widget(
+                row,
+                item['path'],
+                self.app,
+                on_refresh=self.refresh
+            )
 
         FluidAnimator.render_chunked(
             self.results_scroll,

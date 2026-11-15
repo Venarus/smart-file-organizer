@@ -1,8 +1,12 @@
 """
-Thumbnail Engine with Windows Shell & PIL Integration
+Thumbnail Engine with Windows Shell & PIL Integration (V2.1 Stability Upgrade)
 Extracts high-fidelity thumbnails for Videos (.mp4, .mkv, .avi, .mov, etc.)
-and Images (.png, .jpg, .webp, .gif, etc.) using Windows IShellItemImageFactory.
-Includes fast memory & disk caching for sub-millisecond loads.
+and Images (.png, .jpg, .jpeg, .webp, .gif, etc.) using Windows IShellItemImageFactory.
+Includes:
+- Fast memory caching keyed by Tk root instance
+- Locked-aspect-ratio (width x height) placeholder CTkImage generation so cards never
+  resize or shift layout when thumbnails finish loading
+- Thread-safe UIBridge dispatch so widget updates never run on the background thread
 """
 
 import os
@@ -10,8 +14,11 @@ import sys
 import ctypes
 from ctypes import wintypes
 import threading
-from PIL import Image
+import queue
+import tkinter as tk
+from PIL import Image, ImageDraw
 import customtkinter as ctk
+from animation import UIBridge
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = os.path.join(APP_DIR, '.thumbnail_cache')
@@ -26,8 +33,10 @@ try:
 except Exception:
     pass
 
+
 class SIZE(ctypes.Structure):
     _fields_ = [('cx', wintypes.LONG), ('cy', wintypes.LONG)]
+
 
 class GUID(ctypes.Structure):
     _fields_ = [
@@ -37,11 +46,13 @@ class GUID(ctypes.Structure):
         ('Data4', wintypes.BYTE * 8)
     ]
 
+
 # IID_IShellItemImageFactory: {bcc18b79-ba16-442f-80c4-8a59c30c463b}
 IID_IShellItemImageFactory = GUID(
     0xbcc18b79, 0xba16, 0x442f,
     (wintypes.BYTE * 8)(0x80, 0xc4, 0x8a, 0x59, 0xc3, 0x0c, 0x46, 0x3b)
 )
+
 
 class BITMAP(ctypes.Structure):
     _fields_ = [
@@ -53,6 +64,7 @@ class BITMAP(ctypes.Structure):
         ('bmBitsPixel', wintypes.WORD),
         ('bmBits', ctypes.c_void_p)
     ]
+
 
 class BITMAPINFOHEADER(ctypes.Structure):
     _fields_ = [
@@ -69,13 +81,20 @@ class BITMAPINFOHEADER(ctypes.Structure):
         ('biClrImportant', wintypes.DWORD)
     ]
 
+
 class ThumbnailEngine:
-    _memory_cache = {}  # (path, width, height) -> CTkImage
+    _memory_cache = {}       # (root_id, path, width, height) -> CTkImage
+    _pil_cache = {}          # (path, width, height) -> PIL.Image
+    _placeholder_cache = {}  # (root_id, width, height, is_video, theme_mode) -> CTkImage
     _lock = threading.Lock()
 
     SUPPORTED_VIDEO = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.flv', '.m4v'}
     SUPPORTED_IMAGE = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.tiff'}
     SUPPORTED_MEDIA = SUPPORTED_VIDEO | SUPPORTED_IMAGE
+
+    @classmethod
+    def _root_id(cls) -> int:
+        return id(tk._default_root) if tk._default_root is not None else 0
 
     @classmethod
     def is_media_file(cls, path):
@@ -88,24 +107,94 @@ class ThumbnailEngine:
         return ext in cls.SUPPORTED_VIDEO
 
     @classmethod
-    def get_thumbnail(cls, file_path, target_width=160, target_height=110):
+    def get_placeholder(cls, target_width=160, target_height=100, is_video=False, theme_mode='dark'):
         """
-        Dosya için thumbnail döner (CTkImage).
-        Varsa bellekten, yoksa Windows Shell veya PIL üzerinden üretir.
+        Sabit boyutlu (target_width x target_height) yer tutucu CTkImage döndürür.
+        Küçük resim yüklenmeden önce ve yüklendikten sonra bileşen boyutunun birebir aynı
+        kalmasını sağlayarak kaydırma (scroll) sırasında kart kaymalarını %100 önler.
         """
-        cache_key = (file_path, target_width, target_height)
+        rid = cls._root_id()
+        key = (rid, target_width, target_height, bool(is_video), theme_mode)
+        with cls._lock:
+            if key in cls._placeholder_cache:
+                return cls._placeholder_cache[key]
+
+        bg_rgb = (15, 23, 42, 255) if theme_mode == 'dark' else (226, 232, 240, 255)
+        fg_rgb = (59, 130, 246, 180) if is_video else (148, 163, 184, 150)
+
+        canvas = Image.new('RGBA', (target_width, target_height), bg_rgb)
+        draw = ImageDraw.Draw(canvas)
+        cx, cy = target_width // 2, target_height // 2
+
+        if is_video:
+            # Ortada şık oynat (play) üçgeni ve çerçevesi
+            r = 18
+            draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline=fg_rgb, width=2)
+            draw.polygon([(cx - 5, cy - 8), (cx - 5, cy + 8), (cx + 9, cy)], fill=fg_rgb)
+        else:
+            # Ortada minimal görsel çerçevesi ikonu
+            w2, h2 = 18, 14
+            draw.rectangle((cx - w2, cy - h2, cx + w2, cy + h2), outline=fg_rgb, width=2)
+            draw.polygon([(cx - 12, cy + 10), (cx - 3, cy - 2), (cx + 4, cy + 6), (cx + 9, cy + 1), (cx + 14, cy + 10)], fill=fg_rgb)
+
+        ctk_img = ctk.CTkImage(light_image=canvas, dark_image=canvas, size=(target_width, target_height))
+        with cls._lock:
+            cls._placeholder_cache[key] = ctk_img
+        return ctk_img
+
+    @classmethod
+    def get_Cached_Sync(cls, file_path, target_width=160, target_height=100):
+        """Bellekte hazır varsa anında CTkImage döndürür, yoksa None döner (UI thread için sıfır bloklama)."""
+        rid = cls._root_id()
+        cache_key = (rid, file_path, target_width, target_height)
         with cls._lock:
             if cache_key in cls._memory_cache:
                 return cls._memory_cache[cache_key]
+            pil_key = (file_path, target_width, target_height)
+            pil_img = cls._pil_cache.get(pil_key)
+        if pil_img is not None:
+            ctk_img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(target_width, target_height))
+            with cls._lock:
+                cls._memory_cache[cache_key] = ctk_img
+            return ctk_img
+        return None
+
+    @classmethod
+    def extract_pil_thumbnail(cls, file_path, target_width=160, target_height=100):
+        """Arka plan iş parçacığında güvenli çalışır (Tk nesnesi oluşturmaz, yalnızca PIL Image üretir)."""
+        pil_key = (file_path, target_width, target_height)
+        with cls._lock:
+            if pil_key in cls._pil_cache:
+                return cls._pil_cache[pil_key]
 
         img = cls._extract_shell_image(file_path, target_width, target_height)
         if not img:
             img = cls._extract_pil_image(file_path, target_width, target_height)
 
         if img:
+            with cls._lock:
+                if len(cls._pil_cache) > 300:
+                    cls._pil_cache.clear()
+                cls._pil_cache[pil_key] = img
+        return img
+
+    @classmethod
+    def get_thumbnail(cls, file_path, target_width=160, target_height=110):
+        """
+        Dosya için thumbnail döner (CTkImage).
+        Varsa bellekten, yoksa Windows Shell veya PIL üzerinden üretir.
+        """
+        cached = cls.get_Cached_Sync(file_path, target_width, target_height)
+        if cached is not None:
+            return cached
+
+        img = cls.extract_pil_thumbnail(file_path, target_width, target_height)
+        if img:
+            rid = cls._root_id()
+            cache_key = (rid, file_path, target_width, target_height)
             ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(target_width, target_height))
             with cls._lock:
-                if len(cls._memory_cache) > 200:
+                if len(cls._memory_cache) > 300:
                     cls._memory_cache.clear()
                 cls._memory_cache[cache_key] = ctk_img
             return ctk_img
@@ -166,8 +255,7 @@ class ThumbnailEngine:
             raw_img = Image.frombuffer('RGBA', (bmp.bmWidth, bmp.bmHeight), buffer, 'raw', 'BGRA', 0, 1)
             raw_img.thumbnail((width, height), Image.Resampling.LANCZOS)
 
-            # Center on canvas
-            canvas = Image.new('RGBA', (width, height), (30, 30, 30, 255))
+            canvas = Image.new('RGBA', (width, height), (15, 23, 42, 255))
             offset_x = (width - raw_img.width) // 2
             offset_y = (height - raw_img.height) // 2
             canvas.paste(raw_img, (offset_x, offset_y), raw_img if raw_img.mode == 'RGBA' else None)
@@ -181,7 +269,7 @@ class ThumbnailEngine:
             with Image.open(file_path) as img:
                 img = img.convert('RGBA')
                 img.thumbnail((width, height), Image.Resampling.LANCZOS)
-                canvas = Image.new('RGBA', (width, height), (30, 30, 30, 255))
+                canvas = Image.new('RGBA', (width, height), (15, 23, 42, 255))
                 offset_x = (width - img.width) // 2
                 offset_y = (height - img.height) // 2
                 canvas.paste(img, (offset_x, offset_y), img)
@@ -189,7 +277,6 @@ class ThumbnailEngine:
         except Exception:
             return None
 
-import queue
 
 class AsyncThumbnailLoader:
     _queue = queue.Queue()
@@ -197,8 +284,28 @@ class AsyncThumbnailLoader:
     _lock = threading.Lock()
 
     @classmethod
+    def clear_pending(cls):
+        """Sayfa veya filtre değiştiğinde kuyrukta bekleyen eski küçük resim isteklerini temizler."""
+        try:
+            while not cls._queue.empty():
+                cls._queue.get_nowait()
+                cls._queue.task_done()
+        except Exception:
+            pass
+
+    @classmethod
     def request_thumbnail(cls, file_path, width, height, callback):
-        """Kuyruğa küçük resim isteği ekler ve tek bir arka plan thread'i ile sırayla işler."""
+        """
+        Kuyruğa küçük resim isteği ekler.
+        Önbellekte varsa senkron olarak hemen döndürür; yoksa arka planda PIL Image üretir
+        ve CTkImage oluşturma + widget güncellemesini UIBridge üzerinden ana UI thread'de yapar.
+        """
+        cached = ThumbnailEngine.get_Cached_Sync(file_path, width, height)
+        if cached is not None:
+            if callable(callback):
+                callback(cached)
+            return
+
         cls._ensure_worker()
         cls._queue.put((file_path, width, height, callback))
 
@@ -219,9 +326,24 @@ class AsyncThumbnailLoader:
         while True:
             try:
                 file_path, width, height, callback = cls._queue.get()
-                img = ThumbnailEngine.get_thumbnail(file_path, width, height)
+                pil_img = ThumbnailEngine.extract_pil_thumbnail(file_path, width, height)
                 if callback:
-                    callback(img)
+                    def _deliver(p=file_path, w=width, h=height, img=pil_img, cb=callback):
+                        try:
+                            if img is not None:
+                                rid = ThumbnailEngine._root_id()
+                                key = (rid, p, w, h)
+                                with ThumbnailEngine._lock:
+                                    ctk_img = ThumbnailEngine._memory_cache.get(key)
+                                    if ctk_img is None:
+                                        ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(w, h))
+                                        ThumbnailEngine._memory_cache[key] = ctk_img
+                                cb(ctk_img)
+                            else:
+                                cb(None)
+                        except Exception:
+                            pass
+                    UIBridge.post(_deliver)
                 cls._queue.task_done()
             except Exception:
                 pass

@@ -84,6 +84,9 @@ class StorageView(ctk.CTkFrame):
         self._rendered_storage_id = None
         self._start_async_analysis(force=True)
 
+    def refresh(self):
+        self._force_refresh()
+
     def _start_async_analysis(self, force=False):
         if self._is_loading:
             return
@@ -232,6 +235,7 @@ class StorageView(ctk.CTkFrame):
                 height=38
             )
             f_row.pack(fill="x", pady=2)
+            f_row.pack_propagate(False)
             FluidAnimator.bind_card_hover(
                 f_row,
                 self.theme_mode,
@@ -274,7 +278,14 @@ class StorageView(ctk.CTkFrame):
                 text_color=c('warning')
             ).pack(side="right", padx=10)
 
-            FluentContextMenu.bind_to_widget(f_row, lf['path'], self.app)
+            FluentContextMenu.bind_to_widget(
+                f_row,
+                lf['path'],
+                self.app,
+                on_refresh=self.refresh,
+                normal_bg_token='bg_card_secondary',
+                normal_border_token='border_subtle'
+            )
 
         FluidAnimator.render_chunked(
             inner_l,

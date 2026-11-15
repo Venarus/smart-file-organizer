@@ -1,21 +1,23 @@
 """
-Modern Glass File & Category Explorer (Folders Gezgini) (V2.1 — Premium Glass Edition)
+Modern Solid-Surface File & Category Explorer (Folders Gezgini) (V2.1)
 Features:
-- Switchable Bento Glass Grid (2-column) and Detailed Glass List views
-- Glowing Glass Orbs per category + animated storage utilization progress bars
-- Windows 11 Pinned Folders Quick-Jump Glass Ribbon
-- Translucent right-click context menu & smooth hover border illumination
-- Non-blocking Progressive Chunked Rendering & Shared CTkFont Cache
+- Switchable Bento Grid (2-column) and Detailed List views with locked card geometry
+- In-app Folder & File Browser ("🔎 İçeriği Gör") so users can inspect, open, rename,
+  move, copy, or delete individual files inside any category with full right-click context menus
+- Glowing Orbs per category + animated storage utilization progress bars
+- Windows 11 Pinned Folders Quick-Jump Ribbon
 """
 
 import os
 import threading
+from datetime import datetime
 import customtkinter as ctk
 from theme import FluentTheme
 from glass_engine import GlassArtEngine
 from storage_analyzer import StorageAnalyzer
 from animation import FluidAnimator, UIBridge
 from notification_center import FluentContextMenu
+from file_ops import format_size
 
 
 class MyFilesView(ctk.CTkFrame):
@@ -24,6 +26,7 @@ class MyFilesView(ctk.CTkFrame):
         self.app = app_controller
         self.theme_mode = self.app.theme_mode
         self.view_layout = "grid"  # 'grid' veya 'list'
+        self.active_folder_path = None  # None ise ana kategoriler, doluysa klasör içi dosya listesi
         self.stat_labels = {}
         self._is_loading = False
         self._applied_storage_id = None
@@ -38,16 +41,25 @@ class MyFilesView(ctk.CTkFrame):
         self._build_ui()
 
     def on_page_show(self):
+        if self.active_folder_path:
+            return
         target_base = self.app.cfg.get('target', '')
         cached = StorageAnalyzer._cache.get(target_base)
         if cached is not None and id(cached) != self._applied_storage_id:
             self._applied_storage_id = id(cached)
             self._apply_cached_stats(cached.get('category_map', {}))
 
+    def refresh(self):
+        if self.active_folder_path:
+            self._render_folder_contents(self.active_folder_path)
+        else:
+            self._refresh_data()
+
     def _toggle_layout(self, val):
         new_mode = "list" if "Liste" in val else "grid"
         if new_mode != self.view_layout:
             self.view_layout = new_mode
+            self.active_folder_path = None
             self._applied_storage_id = None
             for w in self.winfo_children():
                 w.destroy()
@@ -58,7 +70,7 @@ class MyFilesView(ctk.CTkFrame):
         f = FluentTheme.font
         self.stat_labels.clear()
 
-        # 1. Üst Cam Başlık Kartı
+        # 1. Üst Başlık Kartı
         header_card = ctk.CTkFrame(
             self,
             fg_color=c('bg_card'),
@@ -77,7 +89,7 @@ class MyFilesView(ctk.CTkFrame):
 
         ctk.CTkLabel(
             title_box,
-            text="Folders Cam Gezgini (My Files)",
+            text="Folders Gezgini (My Files)",
             font=f(22, "bold", "Segoe UI Variable Display"),
             text_color=c('text_primary')
         ).pack(anchor="w")
@@ -88,12 +100,13 @@ class MyFilesView(ctk.CTkFrame):
         if cached_info:
             sub_txt += f"   •   {cached_info.get('total_files', 0):,} Dosya   •   {cached_info.get('total_size_human', '0 B')}".replace(',', '.')
 
-        ctk.CTkLabel(
+        self.lbl_subtitle = ctk.CTkLabel(
             title_box,
             text=sub_txt,
             font=f(11),
             text_color=c('accent_light')
-        ).pack(anchor="w", pady=(2, 0))
+        )
+        self.lbl_subtitle.pack(anchor="w", pady=(2, 0))
 
         btn_box = ctk.CTkFrame(header, fg_color="transparent")
         btn_box.pack(side="right")
@@ -124,7 +137,7 @@ class MyFilesView(ctk.CTkFrame):
             height=32,
             width=85,
             corner_radius=8,
-            command=self._refresh_data
+            command=self.refresh
         ).pack(side="left", padx=4)
 
         ctk.CTkButton(
@@ -140,7 +153,7 @@ class MyFilesView(ctk.CTkFrame):
             command=self.app.open_target_folder
         ).pack(side="left", padx=4)
 
-        # 2. Windows 11 Sabitlenen Klasörler Cam Şeridi
+        # 2. Sabitlenen Klasörler Şeridi
         qa_card = ctk.CTkFrame(
             self,
             fg_color=c('bg_card'),
@@ -184,7 +197,7 @@ class MyFilesView(ctk.CTkFrame):
                 command=lambda rid=route_id: self.app.navigate_to(rid)
             ).pack(side="left", padx=3)
 
-        # 3. Kategori Kartları Tuvali
+        # 3. İçerik Tuvali
         self.scroll = ctk.CTkScrollableFrame(
             self,
             fg_color=c('bg_mica'),
@@ -193,9 +206,24 @@ class MyFilesView(ctk.CTkFrame):
         )
         self.scroll.pack(fill="both", expand=True, padx=12, pady=(0, 6))
         try:
-            self.scroll._parent_canvas.configure(yscrollincrement=4)
+            self.scroll._parent_canvas.configure(yscrollincrement=12)
         except Exception:
             pass
+
+        if self.active_folder_path and os.path.exists(self.active_folder_path):
+            self._render_folder_contents(self.active_folder_path)
+        else:
+            self.active_folder_path = None
+            self._render_categories()
+
+    def _render_categories(self):
+        c = lambda token: FluentTheme.c(token, self.theme_mode)
+        f = FluentTheme.font
+        target_base = self.app.cfg.get('target', '')
+
+        FluidAnimator.cancel_chunk_render(self.scroll)
+        for w in self.scroll.winfo_children():
+            w.destroy()
 
         if not os.path.exists(target_base):
             ctk.CTkLabel(
@@ -282,6 +310,198 @@ class MyFilesView(ctk.CTkFrame):
             self._is_loading = True
             threading.Thread(target=self._async_load_stats, args=(target_base,), daemon=True).start()
 
+    def _browse_folder(self, folder_path: str):
+        if not folder_path or not os.path.exists(folder_path):
+            return
+        self.active_folder_path = os.path.normpath(folder_path)
+        self._render_folder_contents(self.active_folder_path)
+
+    def _back_to_categories(self):
+        target_base = os.path.normpath(self.app.cfg.get('target', ''))
+        if self.active_folder_path:
+            parent = os.path.normpath(os.path.dirname(self.active_folder_path))
+            if parent != target_base and parent.startswith(target_base) and os.path.exists(parent):
+                self.active_folder_path = parent
+                self._render_folder_contents(parent)
+                return
+        self.active_folder_path = None
+        self._render_categories()
+
+    def _render_folder_contents(self, folder_path: str):
+        try:
+            if not self.scroll.winfo_exists():
+                return
+        except Exception:
+            return
+
+        c = lambda token: FluentTheme.c(token, self.theme_mode)
+        f = FluentTheme.font
+
+        FluidAnimator.cancel_chunk_render(self.scroll)
+        for w in self.scroll.winfo_children():
+            w.destroy()
+
+        nav_bar = ctk.CTkFrame(self.scroll, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border'), height=46)
+        nav_bar.pack(fill="x", pady=(2, 8))
+        nav_bar.pack_propagate(False)
+
+        ctk.CTkButton(
+            nav_bar,
+            text="⬅ Geri Dön",
+            font=f(11, "bold"),
+            fg_color=c('bg_card_secondary'),
+            hover_color=c('bg_card_hover'),
+            text_color=c('accent_light'),
+            width=100,
+            height=30,
+            corner_radius=7,
+            command=self._back_to_categories
+        ).pack(side="left", padx=10, pady=8)
+
+        ctk.CTkLabel(
+            nav_bar,
+            text=f"📂  {os.path.basename(folder_path)}   ({folder_path})",
+            font=f(12, "bold"),
+            text_color=c('text_primary'),
+            anchor="w"
+        ).pack(side="left", padx=6, fill="x", expand=True)
+
+        ctk.CTkButton(
+            nav_bar,
+            text="📂 Gezginde Aç",
+            font=f(11, "bold"),
+            fg_color=c('accent'),
+            hover_color=c('accent_hover'),
+            text_color="#FFFFFF",
+            width=110,
+            height=30,
+            corner_radius=7,
+            command=lambda p=folder_path: os.startfile(p) if os.path.exists(p) else None
+        ).pack(side="right", padx=10, pady=8)
+
+        entries = []
+        try:
+            with os.scandir(folder_path) as it:
+                for e in it:
+                    if e.name.startswith('.'):
+                        continue
+                    try:
+                        st = e.stat()
+                        is_dir = e.is_dir()
+                        entries.append((e.name, e.path, is_dir, st.st_size, st.st_mtime))
+                    except Exception:
+                        pass
+            entries.sort(key=lambda x: (0 if x[2] else 1, x[0].lower()))
+        except Exception as ex:
+            ctk.CTkLabel(self.scroll, text=f"Klasör okunamadı: {ex}", font=f(12), text_color=c('danger')).pack(pady=30)
+            return
+
+        if not entries:
+            ctk.CTkLabel(
+                self.scroll,
+                text="Bu klasörde henüz dosya veya alt klasör bulunmuyor.",
+                font=f(13),
+                text_color=c('text_muted')
+            ).pack(pady=40)
+            return
+
+        def _render_entry(item_tuple, _idx):
+            name, path, is_dir, sz, mtime = item_tuple
+            row = ctk.CTkFrame(
+                self.scroll,
+                fg_color=c('bg_card'),
+                corner_radius=10,
+                border_width=1,
+                border_color=c('border'),
+                height=46
+            )
+            row.pack(fill="x", pady=2)
+            row.pack_propagate(False)
+            FluidAnimator.bind_card_hover(row, self.theme_mode)
+
+            if is_dir:
+                badge_txt, icon_ch, b_fg, b_bg = ("DIR", "📁", c('accent_light'), c('accent_subtle'))
+                detail_txt = f"Alt Klasör  •  {datetime.fromtimestamp(mtime).strftime('%d.%m.%Y %H:%M')}"
+            else:
+                badge_txt, icon_ch, b_fg, b_bg = FluentTheme.file_badge_style(name, self.theme_mode)
+                detail_txt = f"{format_size(sz)}  •  {datetime.fromtimestamp(mtime).strftime('%d.%m.%Y %H:%M')}"
+
+            ctk.CTkLabel(
+                row,
+                text=f"{icon_ch} {badge_txt}",
+                font=f(10, "bold"),
+                text_color=b_fg,
+                fg_color=b_bg,
+                corner_radius=6,
+                width=54,
+                padx=6,
+                pady=3
+            ).pack(side="left", padx=(12, 10), pady=7)
+
+            ctk.CTkLabel(
+                row,
+                text=name if len(name) <= 44 else name[:41] + "...",
+                font=f(12, "bold"),
+                text_color=c('text_primary'),
+                anchor="w"
+            ).pack(side="left", padx=(0, 12), pady=7)
+
+            ctk.CTkLabel(
+                row,
+                text=detail_txt,
+                font=f(10),
+                text_color=c('text_muted'),
+                anchor="w"
+            ).pack(side="left", pady=7)
+
+            if is_dir:
+                ctk.CTkButton(
+                    row,
+                    text="🔎 İçeriği Gör",
+                    font=f(11, "bold"),
+                    fg_color=c('accent'),
+                    hover_color=c('accent_hover'),
+                    text_color="#FFFFFF",
+                    width=100,
+                    height=28,
+                    corner_radius=7,
+                    command=lambda p=path: self._browse_folder(p)
+                ).pack(side="right", padx=12, pady=7)
+                extra_acts = [("🔎  İçeriği Uygulamada Gör", lambda p=path: self._browse_folder(p))]
+            else:
+                ctk.CTkButton(
+                    row,
+                    text="📂 Aç",
+                    font=f(11, "bold"),
+                    fg_color=c('bg_card_secondary'),
+                    hover_color=c('bg_card_hover'),
+                    text_color=c('text_primary'),
+                    border_width=1,
+                    border_color=c('border'),
+                    width=64,
+                    height=28,
+                    corner_radius=7,
+                    command=lambda p=path: os.startfile(p) if os.path.exists(p) else None
+                ).pack(side="right", padx=12, pady=7)
+                extra_acts = None
+
+            FluentContextMenu.bind_to_widget(
+                row,
+                path,
+                self.app,
+                extra_actions=extra_acts,
+                on_refresh=self.refresh
+            )
+
+        FluidAnimator.render_chunked(
+            self.scroll,
+            entries[:80],
+            _render_entry,
+            initial_batch=10,
+            chunk_size=12,
+            interval_ms=8
+        )
+
     def _async_load_stats(self, target_base):
         try:
             data = StorageAnalyzer.analyze_folder(target_base)
@@ -341,12 +561,14 @@ class MyFilesView(ctk.CTkFrame):
             fg_color=c('bg_card'),
             corner_radius=13,
             border_width=1,
-            border_color=c('border')
+            border_color=c('border'),
+            height=124
         )
+        card.pack_propagate(False)
         FluidAnimator.bind_card_hover(card, self.theme_mode)
 
         top_row = ctk.CTkFrame(card, fg_color="transparent")
-        top_row.pack(fill="x", padx=16, pady=(14, 6))
+        top_row.pack(fill="x", padx=16, pady=(12, 4))
 
         orb_img = GlassArtEngine.get_glass_orb(38, orb_col, self.theme_mode)
         ctk.CTkLabel(
@@ -381,35 +603,34 @@ class MyFilesView(ctk.CTkFrame):
 
         ctk.CTkButton(
             top_row,
-            text="📂 Aç",
+            text="📂 Gezgin",
             font=f(11, "bold"),
             fg_color=c('bg_card_secondary'),
             hover_color=c('bg_card_hover'),
             text_color=c('text_primary'),
             border_width=1,
             border_color=c('border'),
-            width=64,
+            width=72,
             height=28,
             corner_radius=7,
             command=lambda p=cat_path: os.startfile(p) if os.path.exists(p) else None
         ).pack(side="right", padx=(4, 0))
 
-        if "medya" in lower_cat or "video" in lower_cat:
-            ctk.CTkButton(
-                top_row,
-                text="🎬 Galeri",
-                font=f(11, "bold"),
-                fg_color=c('accent'),
-                hover_color=c('accent_hover'),
-                text_color="#FFFFFF",
-                width=74,
-                height=28,
-                corner_radius=7,
-                command=lambda: self.app.navigate_to('media')
-            ).pack(side="right")
+        ctk.CTkButton(
+            top_row,
+            text="🔎 İçeriği Gör",
+            font=f(11, "bold"),
+            fg_color=c('accent'),
+            hover_color=c('accent_hover'),
+            text_color="#FFFFFF",
+            width=96,
+            height=28,
+            corner_radius=7,
+            command=lambda p=cat_path: self._browse_folder(p)
+        ).pack(side="right", padx=(4, 0))
 
         pbar = ctk.CTkProgressBar(card, height=5, corner_radius=3, fg_color=c('bg_card_secondary'))
-        pbar.pack(fill="x", padx=16, pady=(4, 8))
+        pbar.pack(fill="x", padx=16, pady=(4, 6))
         pbar.set(pct_ratio)
         pbar.configure(progress_color=orb_col)
         self.stat_labels[cat_name] = (lbl_info, pbar)
@@ -418,13 +639,22 @@ class MyFilesView(ctk.CTkFrame):
             preview_subs = "  •  ".join(f"📁 {s}" for s in sub_dirs[:4])
             if len(sub_dirs) > 4:
                 preview_subs += f"  (+{len(sub_dirs) - 4})"
-            ctk.CTkLabel(
-                card,
-                text=preview_subs,
-                font=f(10),
-                text_color=c('text_secondary'),
-                anchor="w"
-            ).pack(fill="x", padx=16, pady=(0, 12))
+        else:
+            preview_subs = "📁 Doğrudan kategori klasörü (Sağ tık ile yönetin)"
 
-        FluentContextMenu.bind_to_widget(card, cat_path, self.app)
+        ctk.CTkLabel(
+            card,
+            text=preview_subs,
+            font=f(10),
+            text_color=c('text_secondary'),
+            anchor="w"
+        ).pack(fill="x", padx=16, pady=(0, 8))
+
+        FluentContextMenu.bind_to_widget(
+            card,
+            cat_path,
+            self.app,
+            extra_actions=[("🔎  İçeriği Uygulamada Gör", lambda p=cat_path: self._browse_folder(p))],
+            on_refresh=self.refresh
+        )
         return card

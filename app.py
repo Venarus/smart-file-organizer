@@ -188,7 +188,12 @@ class SmartFileOrganizerApp(ctk.CTk):
         self.bind("<Control-F>", lambda _e: self._focus_global_search())
         self.bind("<F5>", lambda _e: self._refresh_active_view())
         self.bind("<Escape>", lambda _e: self._close_overlays())
+        self.bind("<Up>", lambda _e: FluentContextMenu.navigate_keyboard(-1), add="+")
+        self.bind("<Down>", lambda _e: FluentContextMenu.navigate_keyboard(1), add="+")
+        self.bind("<Return>", lambda _e: FluentContextMenu.activate_focused(), add="+")
         self.bind("<Button-1>", lambda e: self._on_global_left_click(e), add="+")
+        self.bind("<Button-3>", lambda e: FluentContextMenu.handle_global_right_click(e, self), add="+")
+        self.bind_all("<MouseWheel>", lambda _e: FluidAnimator.notify_scroll(), add="+")
 
     def _focus_global_search(self):
         try:
@@ -200,15 +205,14 @@ class SmartFileOrganizerApp(ctk.CTk):
     def _refresh_active_view(self):
         StorageAnalyzer.invalidate_cache()
         if self.current_view:
-            if hasattr(self.current_view, '_refresh_content'):
-                self.current_view._refresh_content()
-            elif hasattr(self.current_view, '_refresh_data'):
-                self.current_view._refresh_data()
-            elif hasattr(self.current_view, 'on_page_show'):
-                self.current_view.on_page_show()
+            for attr in ('refresh', '_start_async_scan', '_load_folder_async', 'load_files', '_refresh_content', '_refresh_data', 'on_page_show'):
+                fn = getattr(self.current_view, attr, None)
+                if callable(fn):
+                    fn()
+                    break
         FluidAnimator.show_toast(
             self,
-            "Cam Yüzey Yenilendi",
+            "Görünüm Yenilendi",
             "Aktif sayfa verileri ve önbellek güncellendi.",
             theme_mode=self.theme_mode,
             duration_ms=1800,
@@ -216,9 +220,11 @@ class SmartFileOrganizerApp(ctk.CTk):
         )
 
     def _close_overlays(self):
+        from file_ops import FileOperationManager
         CommandPalette.close()
         NotificationCenter.close_flyout()
         FluentContextMenu.close_active()
+        FileOperationManager.close_active_modal()
 
     def _on_global_left_click(self, event):
         if FluentContextMenu._active_menu is not None:

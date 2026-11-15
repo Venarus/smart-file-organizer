@@ -1,10 +1,11 @@
 """
-Windows 11 Fluent Glass Design System & Color Tokens (V2.1 — Premium Glass Edition)
-Provides:
-- Deep Midnight Obsidian Glass (DARK) and Crystal Daylight Glass (LIGHT) palettes
-- Cool Cyan-Blue (#0EA5E9 / #38BDF8) & Electric Violet (#8B5CF6 / #A78BFA) dual-accent system
-- Translucent surface hierarchy (Layer 0 Base -> Layer 1 Frosted Card -> Layer 2 Elevated Glass)
-- Specular border tokens and RGB color interpolation utilities.
+Windows 11 Fluent Glass Design System & Color Tokens (V2.1 — Corrected Solid Surface Hierarchy)
+Transparency Rules:
+- Main Application Window Background (bg_primary): Deep Acrylic/Mica base (#070B12 / #E6EEF8)
+- Sidebar (bg_secondary): Semi-opaque solid distinguishable surface (#10192B / #DCE6F4)
+- Main Content Area (bg_mica): Controlled, readable workspace surface (#0B121E / #F1F5FA)
+- Cards & File Rows (bg_card / bg_card_secondary): Solid, high-contrast surfaces (#16233A / #1E2F4D)
+- Dialogs & Context Menus (bg_elevated): Opaque, high-contrast elevated surface (#1B2B46 / #FFFFFF)
 """
 
 import tkinter as tk
@@ -33,74 +34,76 @@ class FluentTheme:
         cls._font_cache[key] = f
         return f
 
-    # Midnight Obsidian Glass Theme (Windows 11 Acrylic & High-End Glassmorphism)
+    # Midnight Obsidian Theme (Windows 11 Acrylic Window + Solid Readable Surfaces)
     DARK = {
-        'bg_primary': '#090D16',         # Derin Gece Obsidyen Tabanı (Acrylic Base)
-        'bg_mica': '#0C1220',            # Ana Çalışma Alanı Cam Tuvali
-        'bg_secondary': '#0E1628',       # Yarı-Saydam Sidebar ve Üst Komut Barı
-        'bg_card': '#131D33',            # Buzlu Cam Kart Yüzeyi (Glass Layer 1)
-        'bg_card_secondary': '#18243E',  # İkincil Cam Katmanı (Glass Layer 2)
-        'bg_elevated': '#1B2845',        # Yükseltilmiş Cam Yüzeyi (Modal / Flyout / Menü)
-        'bg_card_hover': '#1E2E4F',      # Aydınlatılmış Cam Hover Yüzeyi
-        'bg_card_active': '#233862',     # Seçili / Aktif Cam Yüzeyi
-        'bg_input': '#0D1526',           # Çukur Cam Giriş Kutusu (Input Well)
-        'border': '#233554',             # İnce Yarı-Saydam Cam Kenarlığı (1px Specular)
-        'border_subtle': '#18263F',      # Düşük Kontrastlı Cam Ayırıcı
+        'bg_primary': '#070B12',         # Ana Pencere Tabanı (DWM Acrylic / Mica Arka Planı)
+        'bg_mica': '#0B121E',            # Ana Çalışma Alanı Kontrollü Okunaklı Zemin
+        'bg_secondary': '#10192B',       # Yarı-Opak Katı Kenar Çubuğu (Sidebar) ve Üst Bar
+        'bg_card': '#16233A',            # Katı ve Yüksek Kontrastlı Kart & Dosya Satırı Yüzeyi
+        'bg_card_secondary': '#1E2F4D',  # İkincil Katı Kart Katmanı (Alt Satırlar / Çipler)
+        'bg_elevated': '#1B2B46',        # Tam Okunaklı Bağlam Menüsü (Context Menu) / Diyalog Yüzeyi
+        'bg_card_hover': '#24385A',      # Belirgin Satır / Kart Hover Yüzeyi
+        'bg_card_active': '#29436E',     # Seçili / Aktif Dosya Satırı Yüzeyi
+        'bg_input': '#0E1726',           # Belirgin Giriş Kutusu (Input Field) Arka Planı
+        'border': '#293F66',             # Net Kart ve Satır Kenarlığı (1px)
+        'border_subtle': '#1F3150',      # Tablo ve Satır Ayırıcı Kenarlık
         'border_hover': '#38BDF8',       # Hover Durumunda Parlayan Buz Mavisi Kenarlık
-        'border_focus': '#60A5FA',       # Odak (Focus) Işık Kenarlığı
-        'accent': '#0EA5E9',             # Ana Cam Vurgusu (Cool Sky Cyan-Blue)
+        'border_focus': '#60A5FA',       # Odak (Focus) ve Seçim Kenarlığı
+        'accent': '#0EA5E9',             # Ana Vurgu (Cool Sky Cyan-Blue)
         'accent_hover': '#38BDF8',       # Parlak Cyan Hover
         'accent_pressed': '#0284C7',     # Basılı Durum
         'accent_light': '#7DD3FC',       # Buz Mavisi İkon ve Vurgu Metni
+        'accent_bg': '#132A4A',          # Vurgu Rozet Arka Planı
         'accent_violet': '#8B5CF6',      # İkincil Vurgu (Electric Violet)
         'accent_violet_light': '#C4B5FD',# Yumuşak Lavanta / Mor Vurgu
-        'accent_subtle': '#152C4F',      # Yarı-Saydam Seçili Vurgu Arka Planı
+        'accent_subtle': '#173054',      # Seçili Vurgu Arka Planı
         'nav_indicator': '#38BDF8',      # Sol Aktif Menü Neon-Cyan Çubuğu
-        'text_primary': '#F8FAFC',       # Yumuşak Kristal Beyazı Ana Metin
-        'text_secondary': '#94A3B8',     # Buzlu Gümüş İkincil Metin
-        'text_muted': '#64748B',         # Pasif / Alt Bilgi Metni
-        'text_disabled': '#475569',      # Devre Dışı Metin
-        'success': '#34D399',            # Zümrüt Cam Yeşili
-        'success_bg': '#0D2E2B',
-        'warning': '#FBBF24',            # Kehribar Cam Sarısı
-        'warning_bg': '#2E2412',
-        'danger': '#FB7185',             # Yakut Cam Pembesi / Kırmızısı
-        'danger_bg': '#331524',
+        'text_primary': '#F8FAFC',       # Kristal Beyazı Yüksek Kontrastlı Ana Metin
+        'text_secondary': '#CBD5E1',     # Açık Gümüş Okunaklı İkincil Metin
+        'text_muted': '#94A3B8',         # Alt Bilgi / Meta Veri Metni (Yüksek Okunabilirlik)
+        'text_disabled': '#64748B',      # Devre Dışı Metin
+        'success': '#34D399',            # Zümrüt Yeşili
+        'success_bg': '#0F332F',
+        'warning': '#FBBF24',            # Kehribar Sarısı
+        'warning_bg': '#332814',
+        'danger': '#FB7185',             # Yakut Kırmızısı
+        'danger_bg': '#3B1829',
         'error': '#F43F5E',              # Kritik İşlem / Silme
         'info': '#38BDF8',               # Bilgi Mavisi
-        'info_bg': '#102A45',
-        'skeleton_base': '#152038',      # İskelet Yükleme Tabanı
-        'skeleton_highlight': '#24365C', # İskelet Yükleme Işıltısı
-        'quick_access_bg': '#15223B',    # Hızlı Erişim Cam Çip Yüzeyi
-        'quick_access_hover': '#213459'
+        'info_bg': '#132E4C',
+        'skeleton_base': '#18263F',      # İskelet Yükleme Tabanı
+        'skeleton_highlight': '#263B61', # İskelet Yükleme Işıltısı
+        'quick_access_bg': '#1A2A46',    # Hızlı Erişim Katı Çip Yüzeyi
+        'quick_access_hover': '#253B61'
     }
 
-    # Crystal Daylight Glass Theme
+    # Crystal Daylight Theme (Windows 11 Light Mode with Solid Cards)
     LIGHT = {
-        'bg_primary': '#EAF0FA',         # Kristal Gün Işığı Tabanı
-        'bg_mica': '#F1F5FC',            # Ana Çalışma Alanı Tuvali
-        'bg_secondary': '#E4ECF8',       # Yarı-Saydam Sidebar ve Üst Bar
-        'bg_card': '#FFFFFF',            # Kristal Beyaz Cam Kart (Glass Layer 1)
-        'bg_card_secondary': '#F4F7FC',  # İkincil Cam Katmanı (Glass Layer 2)
-        'bg_elevated': '#FFFFFF',        # Yükseltilmiş Modal / Flyout
-        'bg_card_hover': '#F8FAFF',      # Kart Hover Yüzeyi
-        'bg_card_active': '#DBEAFE',     # Seçili Cam Yüzeyi
+        'bg_primary': '#E6EEF8',         # Ana Pencere Tabanı
+        'bg_mica': '#F1F5FA',            # Ana Çalışma Alanı Kontrollü Zemin
+        'bg_secondary': '#DCE6F4',       # Yarı-Opak Katı Sidebar ve Üst Bar
+        'bg_card': '#FFFFFF',            # Katı Beyaz Kart & Dosya Satırı Yüzeyi
+        'bg_card_secondary': '#F4F7FB',  # İkincil Katı Kart Katmanı
+        'bg_elevated': '#FFFFFF',        # Tam Okunaklı Bağlam Menüsü / Diyalog Yüzeyi
+        'bg_card_hover': '#EDF4FF',      # Belirgin Kart Hover Yüzeyi
+        'bg_card_active': '#DBEAFE',     # Seçili Dosya Satırı Yüzeyi
         'bg_input': '#FFFFFF',           # Giriş Kutusu
-        'border': '#CBD8EE',             # İnce Kristal Kenarlık
-        'border_subtle': '#DEE7F5',      # Düşük Kontrastlı Ayırıcı
-        'border_hover': '#0EA5E9',       # Hover Kenarlığı
+        'border': '#C4D4EB',             # Net Kart ve Satır Kenarlığı
+        'border_subtle': '#D8E3F2',      # Düşük Kontrastlı Ayırıcı
+        'border_hover': '#0284C7',       # Hover Kenarlığı
         'border_focus': '#0284C7',       # Odak Kenarlığı
         'accent': '#0284C7',             # Cool Cyan-Blue Accent
         'accent_hover': '#0EA5E9',       # Accent Hover
         'accent_pressed': '#0369A1',     # Accent Basılı
         'accent_light': '#0369A1',       # Vurgu Metni / İkonu
+        'accent_bg': '#E0F2FE',          # Vurgu Rozet Arka Planı
         'accent_violet': '#7C3AED',      # İkincil Mor Vurgu
         'accent_violet_light': '#6D28D9',# Koyu Lavanta
         'accent_subtle': '#E0F2FE',      # Seçili Arka Plan
         'nav_indicator': '#0284C7',      # Sol Aktif Menü Çubuğu
         'text_primary': '#0F172A',       # Derin Arduvaz Ana Metin
-        'text_secondary': '#475569',     # İkincil Metin
-        'text_muted': '#64748B',         # Alt Bilgi Metni
+        'text_secondary': '#334155',     # İkincil Metin
+        'text_muted': '#475569',         # Alt Bilgi Metni
         'text_disabled': '#94A3B8',      # Devre Dışı Metin
         'success': '#059669',
         'success_bg': '#D1FAE5',
@@ -163,7 +166,6 @@ class FluentTheme:
     def interpolate_color(cls, start_hex: str, end_hex: str, t: float) -> str:
         """
         İki renk arasında t (0.0 -> 1.0) oranında doğrusal RGB interpolasyonu yapar.
-        CustomTkinter cam bileşenlerinde pürüzsüz aydınlanma ve geçiş için kullanılır.
         """
         t = max(0.0, min(1.0, float(t)))
         r1, g1, b1 = cls.hex_to_rgb(start_hex)
@@ -176,7 +178,7 @@ class FluentTheme:
     @classmethod
     def file_badge_style(cls, filename: str, mode: str = 'dark') -> tuple:
         """
-        Dosya uzantısına göre (Rozet Metni, İkon, Metin Rengi, Cam Arka Plan Rengi) döndürür.
+        Dosya uzantısına göre (Rozet Metni, İkon, Metin Rengi, Katı Arka Plan Rengi) döndürür.
         """
         lower = (filename or "").lower()
         c = lambda tok: cls.c(tok, mode)
@@ -187,7 +189,7 @@ class FluentTheme:
         if lower.endswith(('.ppt', '.pptx')):
             return ("PPT", "📽️", c('warning'), c('warning_bg'))
         if lower.endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg')):
-            return ("IMG", "🖼️", c('accent_violet_light'), '#231B42' if mode == 'dark' else '#EDE9FE')
+            return ("IMG", "🖼️", c('accent_violet_light'), '#261C4A' if mode == 'dark' else '#EDE9FE')
         if lower.endswith(('.mp4', '.mkv', '.avi', '.mov', '.webm')):
             return ("VID", "🎬", c('danger'), c('danger_bg'))
         if lower.endswith(('.mp3', '.wav', '.flac', '.ogg', '.m4a')):
