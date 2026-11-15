@@ -2,6 +2,7 @@ import os
 import customtkinter as ctk
 from theme import FluentTheme
 from security_backup import SecurityBackupEngine
+from animation import FluidAnimator
 
 class ActivityView(ctk.CTkFrame):
     def __init__(self, master, app_controller):
@@ -11,6 +12,10 @@ class ActivityView(ctk.CTkFrame):
 
         self.current_filter = "Tümü"
         self._build_ui()
+
+    def on_page_show(self):
+        if hasattr(self, 'scroll') and self.scroll.winfo_exists():
+            self._render_list()
 
     def update_theme(self, theme_mode):
         self.theme_mode = theme_mode
@@ -86,6 +91,8 @@ class ActivityView(ctk.CTkFrame):
 
     def _set_filter(self, f_name):
         self.current_filter = f_name
+        for w in self.winfo_children():
+            w.destroy()
         self._build_ui()
 
     def _render_list(self):
@@ -118,6 +125,7 @@ class ActivityView(ctk.CTkFrame):
                 border_color=c('border')
             )
             card.pack(fill="x", pady=3)
+            FluidAnimator.bind_card_hover(card, self.theme_mode)
 
             inner = ctk.CTkFrame(card, fg_color="transparent")
             inner.pack(fill="x", padx=12, pady=8)

@@ -4,6 +4,8 @@ import customtkinter as ctk
 from tkinter import messagebox
 from theme import FluentTheme
 from duplicate_manager import DuplicateManager
+from animation import FluidAnimator, UIBridge
+from notification_center import FluentContextMenu
 
 class DuplicateView(ctk.CTkFrame):
     def __init__(self, master, app_controller):
@@ -151,15 +153,19 @@ class DuplicateView(ctk.CTkFrame):
         else:
             target_path = target_base
 
+        for w in self.scroll.winfo_children():
+            w.destroy()
+        FluidAnimator.create_skeleton(self.scroll, rows=4, row_height=56, theme_mode=self.theme_mode)
+
         def progress_cb(msg):
-            self.after(0, lambda: self.lbl_wasted.configure(text=msg))
+            UIBridge.post(lambda: self.lbl_wasted.configure(text=msg) if self.lbl_wasted.winfo_exists() else None)
 
         def worker():
             try:
                 res = DuplicateManager.scan_directory(target_path, progress_callback=progress_cb)
             except Exception as e:
                 res = {'total_duplicates': 0, 'total_groups': 0, 'wasted_bytes': 0, 'wasted_human': '0 B', 'groups': [], 'error': str(e)}
-            self.after(0, lambda: self._on_scan_completed(res))
+            UIBridge.post(lambda: self._on_scan_completed(res))
 
         threading.Thread(target=worker, daemon=True).start()
 

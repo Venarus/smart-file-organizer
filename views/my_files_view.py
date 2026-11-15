@@ -3,6 +3,9 @@ import threading
 import customtkinter as ctk
 from theme import FluentTheme
 from storage_analyzer import StorageAnalyzer
+from animation import FluidAnimator, UIBridge
+from notification_center import FluentContextMenu
+
 
 class MyFilesView(ctk.CTkFrame):
     def __init__(self, master, app_controller):
@@ -46,7 +49,7 @@ class MyFilesView(ctk.CTkFrame):
 
         ctk.CTkLabel(
             title_box,
-            text="Masaüstünüzdeki Folders klasörünün güncel yapısı ve kategorileri",
+            text="Masaüstünüzdeki Folders klasörünün güncel yapısı ve kategorileri (Sağ tık ile hızlı menü)",
             font=ctk.CTkFont(size=13),
             text_color=c('text_secondary')
         ).pack(anchor="w")
@@ -77,7 +80,7 @@ class MyFilesView(ctk.CTkFrame):
             command=self._refresh_data
         ).pack(side="right", padx=4)
 
-        # Windows 11 Hızlı Erişim Ribbon (Masaüstü, İndirilenler, Belgeler, Resimler, Müzikler, Videolar, Folders)
+        # Windows 11 Hızlı Erişim Ribbon
         qa_card = ctk.CTkFrame(
             self,
             fg_color=c('bg_card'),
@@ -86,6 +89,7 @@ class MyFilesView(ctk.CTkFrame):
             border_color=c('border')
         )
         qa_card.pack(fill="x", padx=16, pady=(0, 10))
+        FluidAnimator.bind_card_hover(qa_card, self.theme_mode)
 
         qa_inner = ctk.CTkFrame(qa_card, fg_color="transparent")
         qa_inner.pack(fill="x", padx=14, pady=10)
@@ -146,7 +150,7 @@ class MyFilesView(ctk.CTkFrame):
             text_color=c('accent_light')
         ).pack(side="left")
 
-        # Kategori Kartları (Scrollable Container — Katı Mica Arka Planı yırtılmaları önler)
+        # Kategori Kartları
         scroll = ctk.CTkScrollableFrame(self, fg_color=c('bg_mica'))
         scroll.pack(fill="both", expand=True, padx=16, pady=(0, 10))
         try:
@@ -154,7 +158,6 @@ class MyFilesView(ctk.CTkFrame):
         except Exception:
             pass
 
-        target_base = self.app.cfg.get('target', '')
         if not os.path.exists(target_base):
             ctk.CTkLabel(
                 scroll,
@@ -202,7 +205,6 @@ class MyFilesView(ctk.CTkFrame):
                 text_color=c('text_muted')
             ).pack(pady=40)
 
-        # Eğer önbellekte henüz yoksa arka planda hesaplat
         if not is_cached and not self._is_loading:
             self._is_loading = True
             threading.Thread(target=self._async_load_stats, args=(target_base,), daemon=True).start()
@@ -211,11 +213,7 @@ class MyFilesView(ctk.CTkFrame):
         try:
             data = StorageAnalyzer.analyze_folder(target_base)
             cmap = data.get('category_map', {})
-            try:
-                if self.winfo_exists():
-                    self.after(0, lambda: self._apply_cached_stats(cmap))
-            except Exception:
-                pass
+            UIBridge.post(lambda: self._apply_cached_stats(cmap))
         except Exception:
             pass
         finally:
@@ -224,8 +222,12 @@ class MyFilesView(ctk.CTkFrame):
     def _apply_cached_stats(self, cmap):
         for cat_name, lbl in self.stat_labels.items():
             if cat_name in cmap:
-                st = cmap[cat_name]
-                lbl.configure(text=f"📊 {st['count']:,} dosya  •  {st['size_human']} ({st['percentage']}%)".replace(',', '.'))
+                try:
+                    if lbl.winfo_exists():
+                        st = cmap[cat_name]
+                        lbl.configure(text=f"📊 {st['count']:,} dosya  •  {st['size_human']} ({st['percentage']}%)".replace(',', '.'))
+                except Exception:
+                    pass
 
     def _refresh_data(self):
         StorageAnalyzer.invalidate_cache()
@@ -245,7 +247,6 @@ class MyFilesView(ctk.CTkFrame):
         else:
             info_text = f"📊 Hesaplanıyor...  •  {len(sub_dirs)} alt klasör"
 
-        # İkon eşleme
         cat_icon = '📁'
         lower_cat = cat_name.lower()
         for k, ic in icon_map.items():
@@ -261,6 +262,7 @@ class MyFilesView(ctk.CTkFrame):
             border_color=c('border')
         )
         card.pack(fill="x", pady=6)
+        FluidAnimator.bind_card_hover(card, self.theme_mode)
 
         inner = ctk.CTkFrame(card, fg_color="transparent")
         inner.pack(fill="x", padx=16, pady=12)
@@ -282,7 +284,7 @@ class MyFilesView(ctk.CTkFrame):
             text=cat_name,
             font=ctk.CTkFont(size=15, weight="bold"),
             text_color=c('text_primary')
-        ).pack(side="left")
+        ).pack(anchor="w")
 
         lbl_info = ctk.CTkLabel(
             left_box,
@@ -335,7 +337,7 @@ class MyFilesView(ctk.CTkFrame):
             inner,
             text="Aç",
             font=ctk.CTkFont(size=12),
-            fg_color=c('bg_card'),
+            fg_color=c('bg_card_secondary'),
             hover_color=c('bg_card_hover'),
             text_color=c('text_primary'),
             width=65,
@@ -344,3 +346,5 @@ class MyFilesView(ctk.CTkFrame):
             command=lambda p=cat_path: os.startfile(p) if os.path.exists(p) else None
         )
         btn_open.pack(side="right")
+
+        FluentContextMenu.bind_to_widget(card, cat_path, self.app)

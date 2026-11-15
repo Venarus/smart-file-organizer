@@ -106,8 +106,10 @@ def organize_file(source_path, target_base_folder, allow_new_categories=True):
         return {
             'timestamp': datetime.now().strftime('%H:%M:%S'),
             'file': file_name,
+            'file_name': file_name,
             'status': 'success',
             'target': rel_target,
+            'target_path': dest_path,
             'category': analysis['category'],
             'subcategory': analysis['subcategory'],
             'detected_type': analysis['detected_type'],
@@ -152,8 +154,10 @@ def organize_item(item_path, target_base_folder, allow_new_categories=True):
             return {
                 'timestamp': datetime.now().strftime('%H:%M:%S'),
                 'file': folder_name,
+                'file_name': folder_name,
                 'status': 'success',
                 'target': rel_target,
+                'target_path': dest_path,
                 'category': analysis['category'],
                 'subcategory': analysis['subcategory'],
                 'detected_type': 'Klasör',
@@ -165,6 +169,7 @@ def organize_item(item_path, target_base_folder, allow_new_categories=True):
             return {
                 'timestamp': datetime.now().strftime('%H:%M:%S'),
                 'file': folder_name,
+                'file_name': folder_name,
                 'status': 'error',
                 'message': f"Hata: {str(e)}"
             }
@@ -183,7 +188,7 @@ def scan_and_organize(source_folders, target_base_folder, allow_new_categories=T
         if norm_source == norm_target or norm_source.startswith(norm_target + os.sep):
             continue
 
-        is_desktop = (norm_source == norm_desktop)
+        is_desktop = (norm_source == norm_desktop or os.path.basename(norm_source) == 'desktop')
 
         try:
             for item in os.listdir(folder):

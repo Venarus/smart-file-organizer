@@ -14,7 +14,8 @@ import customtkinter as ctk
 from theme import FluentTheme
 from thumbnail_engine import ThumbnailEngine, AsyncThumbnailLoader
 from search_engine import SearchEngine
-from animation import FluidAnimator
+from animation import FluidAnimator, UIBridge
+from notification_center import FluentContextMenu
 
 class MediaGalleryView(ctk.CTkFrame):
     def __init__(self, master, app_controller):
@@ -211,11 +212,7 @@ class MediaGalleryView(ctk.CTkFrame):
             files.sort(key=lambda x: x['mtime'], reverse=True)
             self.all_media_files = files
             self._is_loading = False
-            try:
-                if self.winfo_exists():
-                    self.after(0, self._render_grid)
-            except Exception:
-                pass
+            UIBridge.post(self._render_grid)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -289,13 +286,17 @@ class MediaGalleryView(ctk.CTkFrame):
         # Sıralı arka plan kuyruğuyla küçük resim yükleme (CPU ve GDI kilitlenmesini önler)
         def on_thumb_ready(img):
             if img:
-                try:
-                    if card.winfo_exists() and lbl_thumb.winfo_exists():
-                        self.after(0, lambda: lbl_thumb.configure(image=img, text=""))
-                except Exception:
-                    pass
+                def _apply_img():
+                    try:
+                        if card.winfo_exists() and lbl_thumb.winfo_exists():
+                            lbl_thumb.configure(image=img, text="")
+                    except Exception:
+                        pass
+                UIBridge.post(_apply_img)
 
         AsyncThumbnailLoader.request_thumbnail(item['path'], 160, 100, on_thumb_ready)
+        FluidAnimator.bind_card_hover(card, self.theme_mode)
+        FluentContextMenu.bind_to_widget(card, item['path'], self.app)
 
         # Dosya Başlığı
         name_lbl = ctk.CTkLabel(

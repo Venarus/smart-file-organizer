@@ -1,7 +1,11 @@
 import os
+import threading
 import customtkinter as ctk
 from theme import FluentTheme
 from search_engine import SearchEngine
+from animation import FluidAnimator, UIBridge
+from notification_center import FluentContextMenu
+
 
 class SemanticSearchView(ctk.CTkFrame):
     MAX_DISPLAY_RESULTS = 60
@@ -36,7 +40,7 @@ class SemanticSearchView(ctk.CTkFrame):
 
         ctk.CTkLabel(
             title_box,
-            text="Folders ve izlenen klasörlerdeki dosyaları filtrelerle hızlıca bulun",
+            text="Folders ve izlenen klasörlerdeki dosyaları filtrelerle hızlıca bulun (Sağ tık ile hızlı menü)",
             font=ctk.CTkFont(size=13),
             text_color=c('text_secondary')
         ).pack(anchor="w")
@@ -50,6 +54,7 @@ class SemanticSearchView(ctk.CTkFrame):
             border_color=c('border')
         )
         filter_card.pack(fill="x", padx=16, pady=(0, 12))
+        FluidAnimator.bind_card_hover(filter_card, self.theme_mode)
 
         # Satır 1: Arama kutusu ve Ara butonu
         row1 = ctk.CTkFrame(filter_card, fg_color="transparent")
@@ -67,6 +72,9 @@ class SemanticSearchView(ctk.CTkFrame):
         )
         self.query_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
         self.query_entry.bind("<Return>", lambda e: self.perform_search())
+        FluidAnimator.bind_input_focus(self.query_entry, self.theme_mode)
+        # Alias for global search compatibility
+        self.search_entry = self.query_entry
 
         btn_search = ctk.CTkButton(
             row1,
@@ -85,7 +93,6 @@ class SemanticSearchView(ctk.CTkFrame):
         row2 = ctk.CTkFrame(filter_card, fg_color="transparent")
         row2.pack(fill="x", padx=16, pady=(0, 12))
 
-        # Kategori
         ctk.CTkLabel(row2, text="Kategori:", font=ctk.CTkFont(size=11, weight="bold"), text_color=c('text_muted')).pack(side="left", padx=(0, 4))
         self.cat_menu = ctk.CTkOptionMenu(
             row2,
@@ -99,7 +106,6 @@ class SemanticSearchView(ctk.CTkFrame):
         )
         self.cat_menu.pack(side="left", padx=(0, 12))
 
-        # Uzantı
         ctk.CTkLabel(row2, text="Uzantı:", font=ctk.CTkFont(size=11, weight="bold"), text_color=c('text_muted')).pack(side="left", padx=(0, 4))
         self.ext_menu = ctk.CTkOptionMenu(
             row2,
@@ -113,7 +119,6 @@ class SemanticSearchView(ctk.CTkFrame):
         )
         self.ext_menu.pack(side="left", padx=(0, 12))
 
-        # Tarih
         ctk.CTkLabel(row2, text="Tarih:", font=ctk.CTkFont(size=11, weight="bold"), text_color=c('text_muted')).pack(side="left", padx=(0, 4))
         self.date_menu = ctk.CTkOptionMenu(
             row2,
@@ -127,7 +132,6 @@ class SemanticSearchView(ctk.CTkFrame):
         )
         self.date_menu.pack(side="left", padx=(0, 12))
 
-        # Boyut
         ctk.CTkLabel(row2, text="Boyut:", font=ctk.CTkFont(size=11, weight="bold"), text_color=c('text_muted')).pack(side="left", padx=(0, 4))
         self.size_menu = ctk.CTkOptionMenu(
             row2,
@@ -153,7 +157,7 @@ class SemanticSearchView(ctk.CTkFrame):
         )
         self.res_count_lbl.pack(side="left")
 
-        # Sonuçlar Listesi (Scrollable — Katı Mica Arka Planı)
+        # Sonuçlar Listesi
         self.results_scroll = ctk.CTkScrollableFrame(self, fg_color=c('bg_mica'))
         self.results_scroll.pack(fill="both", expand=True, padx=16, pady=(0, 10))
         try:
@@ -161,7 +165,6 @@ class SemanticSearchView(ctk.CTkFrame):
         except Exception:
             pass
 
-        # Başlangıç durumu
         ctk.CTkLabel(
             self.results_scroll,
             text="🔎\n\nDosya adı veya anahtar kelime yazıp 'Ara' butonuna tıklayın.\nFiltreleri kullanarak aramanızı daraltabilirsiniz.",
@@ -175,8 +178,10 @@ class SemanticSearchView(ctk.CTkFrame):
         self.query_entry.insert(0, q)
         self.perform_search()
 
+    def execute_search(self):
+        self.perform_search()
+
     def perform_search(self):
-        c = lambda token: FluentTheme.c(token, self.theme_mode)
         q = self.query_entry.get().strip()
         cat = self.cat_menu.get()
         ext = self.ext_menu.get()
@@ -189,6 +194,7 @@ class SemanticSearchView(ctk.CTkFrame):
             w.destroy()
 
         self.res_count_lbl.configure(text="🔍 Aranıyor... Lütfen bekleyin...")
+        FluidAnimator.create_skeleton(self.results_scroll, rows=4, row_height=52, theme_mode=self.theme_mode)
 
         def _worker():
             res = SearchEngine.search(
@@ -199,16 +205,22 @@ class SemanticSearchView(ctk.CTkFrame):
                 date_filter=date_f,
                 size_filter=size_f
             )
-            try:
-                if self.winfo_exists():
-                    self.after(0, lambda: self._display_results(res))
-            except Exception:
-                pass
+            UIBridge.post(lambda: self._display_results(res))
 
-        import threading
         threading.Thread(target=_worker, daemon=True).start()
 
+    def _analyze_with_ai(self, path):
+        self.app.navigate_to('ai')
+        if self.app.current_view and hasattr(self.app.current_view, 'analyze_file'):
+            self.app.current_view.analyze_file(path)
+
     def _display_results(self, results):
+        try:
+            if not self.results_scroll.winfo_exists():
+                return
+        except Exception:
+            return
+
         c = lambda token: FluentTheme.c(token, self.theme_mode)
         self.results = results
 
@@ -240,11 +252,11 @@ class SemanticSearchView(ctk.CTkFrame):
                 border_color=c('border')
             )
             row.pack(fill="x", pady=3)
+            FluidAnimator.bind_card_hover(row, self.theme_mode)
 
             inner = ctk.CTkFrame(row, fg_color="transparent")
             inner.pack(fill="x", padx=12, pady=8)
 
-            # Sol: İsim ve yol
             left = ctk.CTkFrame(inner, fg_color="transparent")
             left.pack(side="left", fill="both", expand=True)
 
@@ -264,7 +276,6 @@ class SemanticSearchView(ctk.CTkFrame):
                 anchor="w"
             ).pack(anchor="w")
 
-            # Sağ: Aksiyon Butonları
             right = ctk.CTkFrame(inner, fg_color="transparent")
             right.pack(side="right")
 
@@ -304,5 +315,7 @@ class SemanticSearchView(ctk.CTkFrame):
                 width=110,
                 height=26,
                 corner_radius=4,
-                command=lambda p=item['path']: self.app.navigate_to('intelligence', extra_data=p)
+                command=lambda p=item['path']: self._analyze_with_ai(p)
             ).pack(side="left", padx=4)
+
+            FluentContextMenu.bind_to_widget(row, item['path'], self.app)

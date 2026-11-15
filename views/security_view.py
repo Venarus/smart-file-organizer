@@ -3,6 +3,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 from theme import FluentTheme
 from security_backup import SecurityBackupEngine
+from animation import FluidAnimator
 
 class SecurityBackupView(ctk.CTkFrame):
     def __init__(self, master, app_controller):
@@ -11,6 +12,10 @@ class SecurityBackupView(ctk.CTkFrame):
         self.theme_mode = self.app.theme_mode
 
         self._build_ui()
+
+    def on_page_show(self):
+        if hasattr(self, 'scroll') and self.scroll.winfo_exists():
+            self._render_undo_list()
 
     def update_theme(self, theme_mode):
         self.theme_mode = theme_mode

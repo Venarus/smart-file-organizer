@@ -270,6 +270,8 @@ class AutomationView(ctk.CTkFrame):
                 sources.append(norm)
                 self.app.cfg['sources'] = sources
                 save_config(self.app.cfg)
+                for w in self.winfo_children():
+                    w.destroy()
                 self._build_ui()
                 self.app.update_status_footer()
 
@@ -279,6 +281,8 @@ class AutomationView(ctk.CTkFrame):
             sources.remove(path)
             self.app.cfg['sources'] = sources
             save_config(self.app.cfg)
+            for w in self.winfo_children():
+                w.destroy()
             self._build_ui()
             self.app.update_status_footer()
 

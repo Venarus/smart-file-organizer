@@ -1,12 +1,12 @@
 """
-Windows 11 Fluent Pinned Folder View (Hızlı Erişim Klasör Görünümü)
+Windows 11 Fluent Pinned Folder View (Hızlı Erişim Klasör Görünümü) (V2.1)
 Displays Desktop, Downloads, Documents, Pictures, Music, and Videos
 with real-time file listing, native icons, baseline protection status,
+right-click context menus, hover micro-interactions, pagination for large folders,
 and 1-click intelligent organization into Desktop/Folders.
 """
 
 import os
-import sys
 import threading
 from datetime import datetime
 import customtkinter as ctk
@@ -14,6 +14,8 @@ import customtkinter as ctk
 from theme import FluentTheme
 from thumbnail_engine import ThumbnailEngine
 from organizer import organize_file
+from animation import FluidAnimator, UIBridge
+from notification_center import FluentContextMenu
 from config import (
     DEFAULT_DESKTOP,
     DEFAULT_DOWNLOADS,
@@ -63,7 +65,10 @@ FOLDER_META = {
     }
 }
 
+
 class QuickFolderView(ctk.CTkFrame):
+    PAGE_SIZE = 80
+
     def __init__(self, master, app_controller, folder_id='documents'):
         super().__init__(master, fg_color="transparent")
         self.app = app_controller
@@ -71,6 +76,7 @@ class QuickFolderView(ctk.CTkFrame):
         self.meta = FOLDER_META.get(folder_id, FOLDER_META['documents'])
         self.folder_path = self.meta['path']
         self.theme_mode = self.app.theme_mode
+        self._display_limit = self.PAGE_SIZE
 
         self._folder_icon = None
         self._load_icon()
@@ -92,6 +98,7 @@ class QuickFolderView(ctk.CTkFrame):
         self._build_ui()
 
     def on_page_show(self):
+        self._display_limit = self.PAGE_SIZE
         self._refresh_content()
 
     def _build_ui(self):
@@ -104,7 +111,6 @@ class QuickFolderView(ctk.CTkFrame):
         left_box = ctk.CTkFrame(header, fg_color="transparent")
         left_box.pack(side="left")
 
-        # Klasör İkonu
         if self._folder_icon:
             lbl_ic = ctk.CTkLabel(left_box, text="", image=self._folder_icon)
             lbl_ic.pack(side="left", padx=(0, 10))
@@ -215,7 +221,7 @@ class QuickFolderView(ctk.CTkFrame):
 
         ctk.CTkLabel(
             info_bar,
-            text=f"•   {status_txt}",
+            text=f"•   {status_txt}   •   💡 Hızlı menü için satırlara sağ tıklayın",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color=status_clr
         ).pack(side="left", padx=8)
@@ -234,6 +240,10 @@ class QuickFolderView(ctk.CTkFrame):
         for w in self.scroll.winfo_children():
             w.destroy()
         self._render_files()
+
+    def _load_more(self):
+        self._display_limit += self.PAGE_SIZE
+        self._refresh_content()
 
     def _render_files(self):
         c = lambda token: FluentTheme.c(token, self.theme_mode)
@@ -261,7 +271,6 @@ class QuickFolderView(ctk.CTkFrame):
         baseline = set(self.app.cfg.get('desktop_baseline', [])) if self.meta.get('is_desktop') else set()
         ignored_names = {'desktop.ini', 'thumbs.db', '.ds_store'}
 
-        # Dosyaları ve klasörleri sınıflandır
         organizable_files = []
         protected_items = []
 
@@ -297,10 +306,17 @@ class QuickFolderView(ctk.CTkFrame):
                 text_color=c('text_secondary')
             ).pack(side="left", padx=8)
 
-            for name, path, is_file, _ in organizable_files:
+            shown_org = organizable_files[:self._display_limit]
+            for name, path, is_file, _ in shown_org:
                 self._create_file_row(self.scroll, name, path, is_file, can_organize=True, c=c)
         else:
-            empty_box = ctk.CTkFrame(self.scroll, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border_subtle'))
+            empty_box = ctk.CTkFrame(
+                self.scroll,
+                fg_color=c('bg_card'),
+                corner_radius=10,
+                border_width=1,
+                border_color=c('border_subtle')
+            )
             empty_box.pack(fill="x", pady=(4, 12))
 
             ctk.CTkLabel(
@@ -311,7 +327,7 @@ class QuickFolderView(ctk.CTkFrame):
                 justify="center"
             ).pack(padx=20, pady=16)
 
-        # 2. Korunan veya Sabit Öğeler Bölümü (Masaüstü kısayolları veya alt klasörler)
+        # 2. Korunan veya Sabit Öğeler Bölümü
         if protected_items:
             sec_prot = ctk.CTkFrame(self.scroll, fg_color="transparent")
             sec_prot.pack(fill="x", pady=(12, 6))
@@ -324,8 +340,23 @@ class QuickFolderView(ctk.CTkFrame):
                 text_color=c('text_secondary')
             ).pack(side="left")
 
-            for name, path, is_file, is_base in protected_items:
+            shown_prot = protected_items[:self._display_limit]
+            for name, path, is_file, is_base in shown_prot:
                 self._create_file_row(self.scroll, name, path, is_file, can_organize=False, is_baseline=is_base, c=c)
+
+        total_items = len(organizable_files) + len(protected_items)
+        if total_items > self._display_limit:
+            ctk.CTkButton(
+                self.scroll,
+                text=f"Daha Fazla Göster (+{total_items - self._display_limit} öğe)",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                fg_color=c('bg_card'),
+                hover_color=c('bg_card_hover'),
+                text_color=c('accent_light'),
+                height=34,
+                corner_radius=8,
+                command=self._load_more
+            ).pack(pady=10)
 
     def _create_file_row(self, parent, name, path, is_file, can_organize, is_baseline=False, c=None):
         row = ctk.CTkFrame(
@@ -336,18 +367,25 @@ class QuickFolderView(ctk.CTkFrame):
             border_color=c('border')
         )
         row.pack(fill="x", pady=2)
+        FluidAnimator.bind_card_hover(row, self.theme_mode)
 
         inner = ctk.CTkFrame(row, fg_color="transparent")
         inner.pack(fill="x", padx=10, pady=6)
 
         icon_char = "📄" if is_file else "📁"
         _, ext = os.path.splitext(name.lower())
-        if ext in ['.png', '.jpg', '.jpeg', '.webp']: icon_char = "🖼️"
-        elif ext in ['.mp4', '.mkv', '.avi', '.mov']: icon_char = "🎬"
-        elif ext in ['.mp3', '.wav', '.flac']: icon_char = "🎵"
-        elif ext in ['.zip', '.rar', '.7z']: icon_char = "🗄️"
-        elif ext in ['.exe', '.msi']: icon_char = "⚙️"
-        elif ext in ['.lnk']: icon_char = "🔗"
+        if ext in ['.png', '.jpg', '.jpeg', '.webp']:
+            icon_char = "🖼️"
+        elif ext in ['.mp4', '.mkv', '.avi', '.mov']:
+            icon_char = "🎬"
+        elif ext in ['.mp3', '.wav', '.flac']:
+            icon_char = "🎵"
+        elif ext in ['.zip', '.rar', '.7z']:
+            icon_char = "🗄️"
+        elif ext in ['.exe', '.msi']:
+            icon_char = "⚙️"
+        elif ext in ['.lnk']:
+            icon_char = "🔗"
 
         ctk.CTkLabel(
             inner,
@@ -355,7 +393,6 @@ class QuickFolderView(ctk.CTkFrame):
             font=ctk.CTkFont(size=15)
         ).pack(side="left", padx=(0, 8))
 
-        # İsim ve Detay
         info_box = ctk.CTkFrame(inner, fg_color="transparent")
         info_box.pack(side="left", fill="x", expand=True)
 
@@ -384,8 +421,9 @@ class QuickFolderView(ctk.CTkFrame):
             anchor="w"
         ).pack(anchor="w")
 
-        # Rozet / Aksiyon Butonu
+        extra_menu = []
         if can_organize:
+            extra_menu.append(("⚡  Folders'a Organize Et", lambda p=path: self._organize_single(p)))
             ctk.CTkButton(
                 inner,
                 text="⚡ Organize Et",
@@ -422,21 +460,25 @@ class QuickFolderView(ctk.CTkFrame):
                 command=lambda p=path: os.startfile(p) if os.path.exists(p) else None
             ).pack(side="right")
 
+        FluentContextMenu.bind_to_widget(row, path, self.app, extra_actions=extra_menu)
+
     def _organize_single(self, file_path):
         target = self.app.cfg.get('target', DEFAULT_TARGET)
         allow_new = self.app.cfg.get('allow_new_categories', True)
         res = organize_file(file_path, target, allow_new)
         if res and res.get('status') == 'success':
             self._refresh_content()
-            self.app._periodic_status_update()
+            self.app.handle_background_events([res])
 
     def _organize_folder_items(self):
         target = self.app.cfg.get('target', DEFAULT_TARGET)
         allow_new = self.app.cfg.get('allow_new_categories', True)
         baseline = set(self.app.cfg.get('desktop_baseline', [])) if self.meta.get('is_desktop') else set()
 
+        self.btn_organize_now.configure(state="disabled", text="⏳ Organize Ediliyor...")
+
         def run_thread():
-            count = 0
+            events = []
             if os.path.exists(self.folder_path):
                 for item in os.listdir(self.folder_path):
                     if self.meta.get('is_desktop') and item in baseline:
@@ -445,9 +487,27 @@ class QuickFolderView(ctk.CTkFrame):
                     if os.path.isfile(item_path):
                         res = organize_file(item_path, target, allow_new)
                         if res and res.get('status') == 'success':
-                            count += 1
-            if self.winfo_exists():
-                self.after(0, self._refresh_content)
-                self.after(0, self.app._periodic_status_update)
+                            events.append(res)
+
+            def _done():
+                try:
+                    if self.winfo_exists():
+                        self.btn_organize_now.configure(state="normal", text="⚡ Folders'a Organize Et")
+                        self._refresh_content()
+                    if events:
+                        self.app.handle_background_events(events)
+                    else:
+                        FluidAnimator.show_toast(
+                            self.app,
+                            f"{self.meta['name']} Klasörü",
+                            "Organize edilecek yeni bir dosya bulunamadı.",
+                            theme_mode=self.theme_mode,
+                            duration_ms=2200,
+                            level='info'
+                        )
+                except Exception:
+                    pass
+
+            UIBridge.post(_done)
 
         threading.Thread(target=run_thread, daemon=True).start()

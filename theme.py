@@ -1,93 +1,145 @@
 """
-Windows 11 Fluent Design System Theme & Style Definitions
-Provides centralized color tokens, font configurations, and styling helpers
-for both Dark and Light themes matching Microsoft Windows 11 aesthetics.
+Windows 11 Fluent Design System Theme & Color Tokens (V2.1)
+Provides centralized design tokens, dark/light mode switching, surface hierarchy,
+subtle borders, elevation states, and color interpolation utilities.
 """
 
+import customtkinter as ctk
+
+
 class FluentTheme:
-    # --- DARK THEME (Windows 11 Settings / File Explorer Dark) ---
+    # Dark Theme Tokens (Windows 11 Settings / Explorer / Store inspired)
     DARK = {
-        'bg_mica': '#202020',           # Ana Mica arka plan
-        'bg_sidebar': '#1C1C1C',        # Sabit gezinme paneli arka planı (derinlikli)
-        'bg_secondary': '#262626',      # İkincil katman / alt bar
-        'bg_card': '#2B2B2B',           # Kart yüzeyi (Fluent card)
-        'bg_card_hover': '#333333',     # Kart hover
-        'bg_card_active': '#3C3C3C',    # Kart seçili / aktif
-        'bg_input': '#242424',          # Arama ve girdi kutuları
-        'border': '#383838',            # Düşük kontrastlı Windows 11 kenarlık
-        'border_subtle': '#2F2F2F',     # Çok hafif kenarlık
-        'border_focus': '#0078D4',      # Odaklanmış kenarlık
-        'accent': '#0078D4',            # Windows 11 Mavi Accent
-        'accent_hover': '#1A88D8',      # Accent Hover
-        'accent_light': '#4CC2FF',      # Açık mavi vurgu (koyu temada metin için)
-        'accent_bg': '#003E6B',         # Accent arka planı
-        'text_primary': '#FFFFFF',      # Birincil metin (beyaz)
-        'text_secondary': '#D0D0D0',    # İkincil metin (açık gri)
-        'text_muted': '#8E8E8E',        # Sönük metin
-        'success': '#10B981',           # Başarılı / Aktif yeşil
-        'success_bg': '#064E3B',        # Başarılı arka plan
-        'warning': '#F59E0B',           # Uyarı turuncu
-        'warning_bg': '#78350F',        # Uyarı arka plan
-        'danger': '#EF4444',            # Hata / Tehlike kırmızı
-        'danger_bg': '#7F1D1D',         # Tehlike arka plan
-        'sidebar_active': '#2E2E2E',    # Sidebar aktif sekme
-        'sidebar_hover': '#262626',     # Sidebar hover
-        'section_header': '#767676',    # Kategori başlığı (küçük gri)
-        'pill_bg': '#262626',           # Durum etiketi arka planı
-        'quick_access_bg': '#262626',   # Hızlı erişim kartı arka planı
-        'quick_access_hover': '#323232',# Hızlı erişim kartı hover
+        'bg_primary': '#1C1C1C',        # Ana pencere tabanı (Mica Base)
+        'bg_mica': '#202020',           # Ana içerik arka planı
+        'bg_secondary': '#252525',      # Sidebar ve Üst Başlık yüzeyi
+        'bg_card': '#2B2B2B',           # Kart yüzeyi (Fluent Layer 1)
+        'bg_card_secondary': '#323232', # İkincil kart yüzeyi (Fluent Layer 2)
+        'bg_elevated': '#363636',       # Yükseltilmiş yüzey (Modal / Flyout / Palette)
+        'bg_card_hover': '#353535',     # Kart üzerine gelindiğinde
+        'bg_card_active': '#3E3E3E',    # Aktif / Seçili kart veya menü
+        'bg_input': '#242424',          # Giriş alanları / Arama kutusu
+        'border': '#383838',            # İnce kenarlık (Subtle stroke)
+        'border_subtle': '#2F2F2F',     # Çok düşük kontrastlı ayırıcı
+        'border_hover': '#4E4E4E',      # Üzerine gelindiğinde kenarlık
+        'border_focus': '#60CDFF',      # Odak (Focus) kenarlığı
+        'accent': '#0078D4',            # Windows 11 Ana Mavi Accent
+        'accent_hover': '#1984D8',      # Accent Hover
+        'accent_pressed': '#006CBE',    # Accent Basılı
+        'accent_light': '#60CDFF',      # Açık Mavi (İkonlar ve vurgular)
+        'accent_subtle': '#1E3A52',     # Yumuşak mavi seçili arka plan
+        'nav_indicator': '#60CDFF',     # Sol aktif menü dikey vurgu çubuğu
+        'text_primary': '#FFFFFF',      # Ana metin
+        'text_secondary': '#C5C5C5',    # İkincil açıklama metni
+        'text_muted': '#8A8A8A',        # Pasif / Alt bilgi metni
+        'text_disabled': '#5E5E5E',     # Devre dışı metin
+        'success': '#6CCB5F',           # Başarılı (Windows Security Yeşili)
+        'success_bg': '#1E3320',
+        'warning': '#FCE100',           # Uyarı
+        'warning_bg': '#3A3415',
+        'danger': '#FF99A4',            # Hata / Silme
+        'danger_bg': '#3D1E22',
+        'error': '#F44336',             # Kritik Hata Butonu
+        'info': '#60CDFF',              # Bilgi
+        'info_bg': '#192E3D',
+        'skeleton_base': '#292929',     # İskelet yükleme tabanı
+        'skeleton_highlight': '#383838',# İskelet yükleme parlaması
+        'quick_access_bg': '#262626',   # Hızlı Erişim çip arka planı
+        'quick_access_hover': '#333333'
     }
 
-    # --- LIGHT THEME (Windows 11 Settings / File Explorer Light) ---
+    # Light Theme Tokens
     LIGHT = {
-        'bg_mica': '#F3F3F3',           # Ana Mica arka plan
-        'bg_sidebar': '#F8F8F8',        # Sabit gezinme paneli arka planı
-        'bg_secondary': '#EAEAEA',      # İkincil katman / alt bar
-        'bg_card': '#FFFFFF',           # Kart yüzeyi
-        'bg_card_hover': '#F5F5F5',     # Kart hover
-        'bg_card_active': '#EBEBEB',    # Kart seçili / aktif
-        'bg_input': '#FFFFFF',          # Arama ve girdi kutuları
-        'border': '#E5E5E5',            # Düşük kontrastlı açık gri kenarlık
-        'border_subtle': '#EEEEEE',     # Çok hafif kenarlık
-        'border_focus': '#0078D4',      # Odaklanmış kenarlık
-        'accent': '#0078D4',            # Windows 11 Mavi Accent
-        'accent_hover': '#006CBE',      # Accent Hover
-        'accent_light': '#0078D4',      # Vurgu
-        'accent_bg': '#E0EEF9',         # Accent arka planı
-        'text_primary': '#1A1A1A',      # Birincil metin
-        'text_secondary': '#5A5A5A',    # İkincil metin
-        'text_muted': '#7A7A7A',        # Sönük metin
-        'success': '#059669',           # Başarılı yeşil
-        'success_bg': '#D1FAE5',        # Başarılı arka plan
-        'warning': '#D97706',           # Uyarı
-        'warning_bg': '#FEF3C7',        # Uyarı arka plan
-        'danger': '#DC2626',            # Hata
-        'danger_bg': '#FEE2E2',         # Hata arka plan
-        'sidebar_active': '#EAEAEA',    # Sidebar aktif sekme
-        'sidebar_hover': '#F2F2F2',     # Sidebar hover
-        'section_header': '#8C8C8C',    # Kategori başlığı
-        'pill_bg': '#EAEAEA',           # Durum etiketi arka planı
-        'quick_access_bg': '#FFFFFF',   # Hızlı erişim kartı arka planı
-        'quick_access_hover': '#F0F0F0',# Hızlı erişim kartı hover
-    }
-
-    # Font tanımları (Windows 11 yerel yazı tipleri)
-    FONTS = {
-        'family_title': 'Segoe UI Variable Display',
-        'family_body': 'Segoe UI Variable Text',
-        'family_mono': 'Consolas',
-        'fallback': 'Segoe UI'
+        'bg_primary': '#F3F3F3',        # Ana pencere tabanı (Mica Light)
+        'bg_mica': '#F3F3F3',           # Ana içerik arka planı
+        'bg_secondary': '#EBEBEB',      # Sidebar ve Üst Başlık yüzeyi
+        'bg_card': '#FFFFFF',           # Kart yüzeyi (Fluent Layer 1)
+        'bg_card_secondary': '#F6F6F6', # İkincil kart yüzeyi (Fluent Layer 2)
+        'bg_elevated': '#FFFFFF',       # Yükseltilmiş yüzey (Modal / Flyout / Palette)
+        'bg_card_hover': '#F9F9F9',     # Kart üzerine gelindiğinde
+        'bg_card_active': '#E5E5E5',    # Aktif / Seçili kart veya menü
+        'bg_input': '#FFFFFF',          # Giriş alanları
+        'border': '#E0E0E0',            # İnce kenarlık
+        'border_subtle': '#EAEAEA',     # Çok düşük kontrastlı ayırıcı
+        'border_hover': '#BDBDBD',      # Üzerine gelindiğinde kenarlık
+        'border_focus': '#0067C0',      # Odak (Focus) kenarlığı
+        'accent': '#0067C0',            # Windows 11 Light Mavi Accent
+        'accent_hover': '#1975C5',      # Accent Hover
+        'accent_pressed': '#005BA1',    # Accent Basılı
+        'accent_light': '#005FB8',      # Vurgu metni / ikonu
+        'accent_subtle': '#E1F0FF',     # Yumuşak mavi seçili arka plan
+        'nav_indicator': '#0067C0',     # Sol aktif menü dikey vurgu çubuğu
+        'text_primary': '#1A1A1A',      # Ana metin
+        'text_secondary': '#5C5C5C',    # İkincil açıklama metni
+        'text_muted': '#868686',        # Pasif / Alt bilgi metni
+        'text_disabled': '#A8A8A8',     # Devre dışı metin
+        'success': '#0F7B0F',           # Başarılı
+        'success_bg': '#E6F4E6',
+        'warning': '#9D5D00',           # Uyarı
+        'warning_bg': '#FFF8E6',
+        'danger': '#C42B1C',            # Hata / Silme
+        'danger_bg': '#FDE7E9',
+        'error': '#D32F2F',             # Kritik Hata Butonu
+        'info': '#0067C0',              # Bilgi
+        'info_bg': '#E8F3FC',
+        'skeleton_base': '#E6E6E6',     # İskelet yükleme tabanı
+        'skeleton_highlight': '#F5F5F5',# İskelet yükleme parlaması
+        'quick_access_bg': '#FFFFFF',   # Hızlı Erişim çip arka planı
+        'quick_access_hover': '#F0F0F0'
     }
 
     @classmethod
-    def get_palette(cls, theme_mode='dark'):
-        mode = theme_mode.lower()
+    def get_colors(cls, mode='dark'):
         if mode == 'light':
             return cls.LIGHT
         return cls.DARK
 
     @classmethod
-    def c(cls, token, theme_mode='dark'):
-        """Belirtilen tasarım belirtecinin (token) rengini döner."""
-        palette = cls.get_palette(theme_mode)
-        return palette.get(token, palette.get('accent'))
+    def apply_appearance(cls, mode='dark'):
+        if mode == 'system':
+            ctk.set_appearance_mode("System")
+        elif mode == 'light':
+            ctk.set_appearance_mode("Light")
+        else:
+            ctk.set_appearance_mode("Dark")
+
+    @classmethod
+    def c(cls, token_name, current_mode='dark'):
+        """Belirtilen mod için renk kodunu döndürür."""
+        palette = cls.LIGHT if current_mode == 'light' else cls.DARK
+        return palette.get(token_name, '#0078D4')
+
+    @staticmethod
+    def hex_to_rgb(hex_color: str) -> tuple:
+        """#RRGGBB kodunu (R, G, B) tuple değerine dönüştürür."""
+        h = hex_color.lstrip('#')
+        if len(h) == 3:
+            h = ''.join(ch * 2 for ch in h)
+        if len(h) != 6:
+            return (0, 120, 212)
+        try:
+            return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+        except ValueError:
+            return (0, 120, 212)
+
+    @staticmethod
+    def rgb_to_hex(rgb: tuple) -> str:
+        """(R, G, B) tuple değerini #RRGGBB koduna dönüştürür."""
+        r = max(0, min(255, int(round(rgb[0]))))
+        g = max(0, min(255, int(round(rgb[1]))))
+        b = max(0, min(255, int(round(rgb[2]))))
+        return f"#{r:02X}{g:02X}{b:02X}"
+
+    @classmethod
+    def interpolate_color(cls, start_hex: str, end_hex: str, t: float) -> str:
+        """
+        İki renk arasında t (0.0 -> 1.0) oranında doğrusal RGB interpolasyonu yapar.
+        CustomTkinter bileşenlerinde yumuşak geçiş (fade / hover / focus) için kullanılır.
+        """
+        t = max(0.0, min(1.0, float(t)))
+        r1, g1, b1 = cls.hex_to_rgb(start_hex)
+        r2, g2, b2 = cls.hex_to_rgb(end_hex)
+        r = r1 + (r2 - r1) * t
+        g = g1 + (g2 - g1) * t
+        b = b1 + (b2 - b1) * t
+        return cls.rgb_to_hex((r, g, b))

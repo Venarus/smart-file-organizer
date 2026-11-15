@@ -3,7 +3,9 @@ import threading
 import customtkinter as ctk
 from theme import FluentTheme
 from storage_analyzer import StorageAnalyzer
-from search_engine import SearchEngine
+from animation import FluidAnimator, UIBridge
+from notification_center import FluentContextMenu
+
 
 class StorageView(ctk.CTkFrame):
     def __init__(self, master, app_controller):
@@ -23,35 +25,35 @@ class StorageView(ctk.CTkFrame):
     def _build_ui(self):
         c = lambda token: FluentTheme.c(token, self.theme_mode)
 
-        # Başlık ve Yenile Butonu
+        # Başlık ve Yenile Barı
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(fill="x", padx=16, pady=(10, 14))
 
-        title_box = ctk.CTkFrame(header, fg_color="transparent")
-        title_box.pack(side="left")
+        left_t = ctk.CTkFrame(header, fg_color="transparent")
+        left_t.pack(side="left")
 
         ctk.CTkLabel(
-            title_box,
-            text="Depolama ve Boyut Analizcisi",
+            left_t,
+            text="Depolama Alanı Analizi (Storage Analyzer)",
             font=ctk.CTkFont(size=24, weight="bold"),
             text_color=c('text_primary')
         ).pack(anchor="w")
 
         ctk.CTkLabel(
-            title_box,
-            text="Folders klasörünün disk alanı kullanımını ve en büyük dosyaları görselleştirin",
+            left_t,
+            text="Folders içerisindeki kategorilerin disk kullanım dağılımı ve en büyük dosyalar",
             font=ctk.CTkFont(size=13),
             text_color=c('text_secondary')
         ).pack(anchor="w")
 
         ctk.CTkButton(
             header,
-            text="🔄 Yeniden Tara",
+            text="🔄 Yeniden Hesapla",
             font=ctk.CTkFont(size=12, weight="bold"),
             fg_color=c('accent'),
             hover_color=c('accent_hover'),
             height=34,
-            corner_radius=6,
+            corner_radius=8,
             command=self._force_refresh
         ).pack(side="right")
 
@@ -63,132 +65,198 @@ class StorageView(ctk.CTkFrame):
             pass
 
         target_base = self.app.cfg.get('target', '')
-        if not os.path.exists(target_base):
-            ctk.CTkLabel(self.scroll, text="Hedef klasör bulunamadı.", font=ctk.CTkFont(size=14), text_color=c('danger')).pack(pady=40)
-            return
-
         if target_base in StorageAnalyzer._cache:
-            self._render_storage_content(StorageAnalyzer._cache[target_base])
+            self._render_data(StorageAnalyzer._cache[target_base])
         else:
-            self._render_loading_state()
-            if not self._is_loading:
-                self._is_loading = True
-                threading.Thread(target=self._async_load, args=(target_base,), daemon=True).start()
+            self._start_async_analysis(force=False)
 
-    def _render_loading_state(self):
+    def _force_refresh(self):
+        StorageAnalyzer.invalidate_cache()
+        self._start_async_analysis(force=True)
+
+    def _start_async_analysis(self, force=False):
+        if self._is_loading:
+            return
+        self._is_loading = True
         c = lambda token: FluentTheme.c(token, self.theme_mode)
+
         for w in self.scroll.winfo_children():
             w.destroy()
 
         ctk.CTkLabel(
             self.scroll,
-            text="⏳\n\nDepolama dağılımı ve büyük dosyalar arka planda hesaplanıyor...\nLütfen bekleyin.",
-            font=ctk.CTkFont(size=14),
-            text_color=c('text_muted'),
-            justify="center"
-        ).pack(pady=60)
+            text="⏳ Depolama dağılımı arka planda analiz ediliyor...",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=c('accent_light')
+        ).pack(anchor="w", pady=(10, 4))
 
-    def _async_load(self, target_base):
-        try:
-            data = StorageAnalyzer.analyze_folder(target_base)
-            try:
-                if self.winfo_exists():
-                    self.after(0, lambda: self._render_storage_content(data))
-            except Exception:
-                pass
-        except Exception:
-            pass
-        finally:
+        FluidAnimator.create_skeleton(self.scroll, rows=4, row_height=56, theme_mode=self.theme_mode)
+
+        target_base = self.app.cfg.get('target', '')
+
+        def worker():
+            data = StorageAnalyzer.analyze_folder(target_base, force_refresh=force)
             self._is_loading = False
+            UIBridge.post(lambda: self._render_data(data))
 
-    def _render_storage_content(self, data):
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _render_data(self, data):
+        try:
+            if not self.scroll.winfo_exists():
+                return
+        except Exception:
+            return
+
         c = lambda token: FluentTheme.c(token, self.theme_mode)
         for w in self.scroll.winfo_children():
             w.destroy()
 
-        # 1. Metrik Kartları
-        m_frame = ctk.CTkFrame(self.scroll, fg_color="transparent")
-        m_frame.pack(fill="x", pady=(0, 14))
-        m_frame.grid_columnconfigure((0, 1, 2), weight=1, uniform="m_col")
+        # 1. Özet Kartı
+        top_card = ctk.CTkFrame(
+            self.scroll,
+            fg_color=c('bg_card'),
+            corner_radius=10,
+            border_width=1,
+            border_color=c('border')
+        )
+        top_card.pack(fill="x", pady=(0, 14))
+        FluidAnimator.bind_card_hover(top_card, self.theme_mode)
 
-        metrics = [
-            ("💾 Toplam Kaplanan Alan", data['total_size_human'], c('accent_light')),
-            ("📄 Toplam Dosya Sayısı", f"{data['total_files']:,}".replace(',', '.') + " Adet", c('text_primary')),
-            ("📁 Toplam Klasör Sayısı", f"{data['total_dirs']} Adet", c('text_primary'))
-        ]
+        inner_top = ctk.CTkFrame(top_card, fg_color="transparent")
+        inner_top.pack(fill="x", padx=18, pady=16)
 
-        for i, (label, val, col) in enumerate(metrics):
-            card = ctk.CTkFrame(m_frame, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border'))
-            card.grid(row=0, column=i, padx=4, sticky="nsew")
-            ctk.CTkLabel(card, text=label, font=ctk.CTkFont(size=12, weight="bold"), text_color=c('text_secondary')).pack(anchor="w", padx=14, pady=(12, 2))
-            ctk.CTkLabel(card, text=val, font=ctk.CTkFont(size=20, weight="bold"), text_color=col).pack(anchor="w", padx=14, pady=(0, 12))
+        ctk.CTkLabel(
+            inner_top,
+            text=f"💾 Toplam Kullanılan Alan: {data['total_size_human']}",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=c('accent_light')
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            inner_top,
+            text=f"Toplam Dosya Sayısı: {data['total_files']:,}".replace(',', '.'),
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=c('text_primary')
+        ).pack(side="right")
 
         # 2. Kategori Dağılım Çubukları
-        cat_card = ctk.CTkFrame(self.scroll, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border'))
+        cat_card = ctk.CTkFrame(
+            self.scroll,
+            fg_color=c('bg_card'),
+            corner_radius=10,
+            border_width=1,
+            border_color=c('border')
+        )
         cat_card.pack(fill="x", pady=(0, 14))
 
+        inner_cat = ctk.CTkFrame(cat_card, fg_color="transparent")
+        inner_cat.pack(fill="x", padx=18, pady=16)
+
         ctk.CTkLabel(
-            cat_card,
-            text="📊 Kategorilere Göre Disk Kullanımı",
-            font=ctk.CTkFont(size=14, weight="bold"),
+            inner_cat,
+            text="📊 Kategorilere Göre Alan Dağılımı",
+            font=ctk.CTkFont(size=15, weight="bold"),
             text_color=c('text_primary')
-        ).pack(anchor="w", padx=16, pady=(12, 10))
+        ).pack(anchor="w", pady=(0, 12))
 
         for cat in data.get('categories', []):
-            c_row = ctk.CTkFrame(cat_card, fg_color="transparent")
-            c_row.pack(fill="x", padx=16, pady=4)
+            row = ctk.CTkFrame(inner_cat, fg_color="transparent")
+            row.pack(fill="x", pady=5)
 
-            header = ctk.CTkFrame(c_row, fg_color="transparent")
-            header.pack(fill="x")
-            ctk.CTkLabel(header, text=cat['name'], font=ctk.CTkFont(size=12, weight="bold"), text_color=c('text_primary')).pack(side="left")
-            ctk.CTkLabel(header, text=f"{cat['size_human']}  (%{cat['percentage']})  •  {cat['count']:,} dosya".replace(',', '.'), font=ctk.CTkFont(size=11), text_color=c('text_muted')).pack(side="right")
+            top_r = ctk.CTkFrame(row, fg_color="transparent")
+            top_r.pack(fill="x")
 
-            pb = ctk.CTkProgressBar(c_row, height=6, corner_radius=3)
-            pb.pack(fill="x", pady=(2, 6))
-            pb.set(cat['percentage'] / 100.0)
-            pb.configure(progress_color=c('accent'))
+            ctk.CTkLabel(
+                top_r,
+                text=f"📁 {cat['name']} ({cat['count']:,} dosya)".replace(',', '.'),
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=c('text_primary')
+            ).pack(side="left")
 
-        ctk.CTkFrame(cat_card, fg_color="transparent", height=8).pack()
-
-        # 3. En Büyük 10 Dosya
-        large_card = ctk.CTkFrame(self.scroll, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border'))
-        large_card.pack(fill="x", pady=(0, 14))
-
-        ctk.CTkLabel(
-            large_card,
-            text="🐘 En Çok Yer Kaplayan İlk 10 Dosya",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color=c('text_primary')
-        ).pack(anchor="w", padx=16, pady=(12, 8))
-
-        for item in data.get('largest_files', []):
-            row = ctk.CTkFrame(large_card, fg_color=c('bg_mica'), corner_radius=6)
-            row.pack(fill="x", padx=14, pady=3)
-
-            inner = ctk.CTkFrame(row, fg_color="transparent")
-            inner.pack(fill="x", padx=10, pady=6)
-
-            left = ctk.CTkFrame(inner, fg_color="transparent")
-            left.pack(side="left", fill="both", expand=True)
-
-            ctk.CTkLabel(left, text=item['name'], font=ctk.CTkFont(size=12, weight="bold"), text_color=c('text_primary')).pack(anchor="w")
-            ctk.CTkLabel(left, text=f"[{item['category']}] • {item['size_human']}", font=ctk.CTkFont(size=10), text_color=c('accent_light')).pack(anchor="w")
-
-            ctk.CTkButton(
-                inner,
-                text="Klasörde Göster",
-                font=ctk.CTkFont(size=11),
-                fg_color=c('bg_card_hover'),
-                hover_color=c('bg_card_active'),
-                text_color=c('text_primary'),
-                width=100,
-                height=26,
-                corner_radius=6,
-                command=lambda p=item['path']: SearchEngine.reveal_in_explorer(p)
+            ctk.CTkLabel(
+                top_r,
+                text=f"{cat['size_human']}  (%{cat['percentage']})",
+                font=ctk.CTkFont(size=12),
+                text_color=c('accent_light')
             ).pack(side="right")
 
-        ctk.CTkFrame(large_card, fg_color="transparent", height=8).pack()
+            pbar = ctk.CTkProgressBar(row, height=8, corner_radius=4)
+            pbar.pack(fill="x", pady=(4, 0))
+            pbar.set(0.0)
+            pbar.configure(progress_color=c('accent'))
+            target_ratio = max(0.02, min(1.0, cat['percentage'] / 100.0))
+            FluidAnimator.animate_progress(pbar, target_ratio, duration_ms=FluidAnimator.TIMING_COMPLEX, start_val=0.0)
 
-    def _force_refresh(self):
-        StorageAnalyzer.invalidate_cache()
-        self._build_ui()
+        # 3. En Büyük 15 Dosya
+        large_card = ctk.CTkFrame(
+            self.scroll,
+            fg_color=c('bg_card'),
+            corner_radius=10,
+            border_width=1,
+            border_color=c('border')
+        )
+        large_card.pack(fill="x", pady=(0, 10))
+
+        inner_l = ctk.CTkFrame(large_card, fg_color="transparent")
+        inner_l.pack(fill="x", padx=18, pady=16)
+
+        ctk.CTkLabel(
+            inner_l,
+            text="🐘 En Çok Yer Kaplayan Dosyalar (Top 15 — Sağ Tık ile Hızlı Menü)",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color=c('text_primary')
+        ).pack(anchor="w", pady=(0, 10))
+
+        for idx, lf in enumerate(data.get('largest_files', [])[:15], 1):
+            f_row = ctk.CTkFrame(
+                inner_l,
+                fg_color=c('bg_card_secondary'),
+                corner_radius=6,
+                border_width=1,
+                border_color=c('border_subtle')
+            )
+            f_row.pack(fill="x", pady=3)
+            FluidAnimator.bind_card_hover(
+                f_row,
+                self.theme_mode,
+                normal_bg_token='bg_card_secondary',
+                hover_bg_token='bg_card_hover',
+                normal_border_token='border_subtle',
+                hover_border_token='border_hover'
+            )
+
+            ctk.CTkLabel(
+                f_row,
+                text=f"#{idx}  {lf['name']}",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=c('text_primary')
+            ).pack(side="left", padx=12, pady=8)
+
+            ctk.CTkLabel(
+                f_row,
+                text=f"[{lf['category']}]",
+                font=ctk.CTkFont(size=11),
+                text_color=c('text_muted')
+            ).pack(side="left", padx=6)
+
+            ctk.CTkButton(
+                f_row,
+                text="Aç",
+                width=50,
+                height=24,
+                corner_radius=4,
+                font=ctk.CTkFont(size=11),
+                fg_color=c('accent'),
+                hover_color=c('accent_hover'),
+                command=lambda p=lf['path']: os.startfile(p) if os.path.exists(p) else None
+            ).pack(side="right", padx=10)
+
+            ctk.CTkLabel(
+                f_row,
+                text=lf['size_human'],
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=c('warning')
+            ).pack(side="right", padx=10)
+
+            FluentContextMenu.bind_to_widget(f_row, lf['path'], self.app)

@@ -1,21 +1,22 @@
 import os
 import threading
 import customtkinter as ctk
-from tkinter import filedialog
+from datetime import datetime
 from theme import FluentTheme
 from storage_analyzer import StorageAnalyzer
 from security_backup import SecurityBackupEngine
-from animation import FluidAnimator
+from animation import FluidAnimator, UIBridge
+
 
 class HomeView(ctk.CTkFrame):
     def __init__(self, master, app_controller):
         super().__init__(master, fg_color="transparent")
         self.app = app_controller
         self.theme_mode = self.app.theme_mode
-
-        self.lbl_total_files = None
-        self.lbl_total_size = None
         self._is_loading_stats = False
+        self._prev_files = 0
+        self._prev_cats = 0
+        self._prev_today = 0
 
         self._build_ui()
 
@@ -25,371 +26,432 @@ class HomeView(ctk.CTkFrame):
             widget.destroy()
         self._build_ui()
 
+    @staticmethod
+    def _get_activity_summary():
+        history = SecurityBackupEngine.get_history(limit=500, active_only=True)
+        today_prefix = datetime.now().strftime('%Y-%m-%d')
+        today_cnt = sum(1 for tx in history if str(tx.get('timestamp', '')).startswith(today_prefix))
+        return {'today': today_cnt, 'total': len(history)}
+
     def on_page_show(self):
-        """Kullanıcı Ana Sayfaya her geri döndüğünde tetiklenir."""
-        self.refresh_stats()
+        """Sayfa tekrar görünür olduğunda tüm bileşenleri silmeden sayaçları ve son işlemleri günceller."""
+        c = lambda token: FluentTheme.c(token, self.theme_mode)
+        summary = self._get_activity_summary()
+        new_today = summary.get('today', 0)
 
-    def refresh_stats(self):
-        """İstatistikleri arka planda günceller."""
-        if self._is_loading_stats:
-            return
-        target_folder = self.app.cfg.get('target', '')
-        if target_folder in StorageAnalyzer._cache:
-            self._apply_stats(StorageAnalyzer._cache[target_folder])
-        else:
+        if hasattr(self, 'lbl_today_actions') and self.lbl_today_actions.winfo_exists():
+            FluidAnimator.animate_counter(
+                self.lbl_today_actions,
+                self._prev_today,
+                new_today,
+                duration_ms=FluidAnimator.TIMING_COMPLEX
+            )
+            self._prev_today = new_today
+
+        target_base = self.app.cfg.get('target', '')
+        cached_storage = StorageAnalyzer._cache.get(target_base)
+        if cached_storage:
+            self._apply_storage_stats(cached_storage)
+        elif not self._is_loading_stats:
             self._is_loading_stats = True
-            threading.Thread(target=self._async_load_stats, args=(target_folder,), daemon=True).start()
+            threading.Thread(target=self._async_load_stats, args=(target_base,), daemon=True).start()
 
-    def _async_load_stats(self, target_folder):
-        try:
-            data = StorageAnalyzer.analyze_folder(target_folder)
-            try:
-                if self.winfo_exists():
-                    self.after(0, lambda: self._apply_stats(data))
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-    def _apply_stats(self, data):
-        self._is_loading_stats = False
-        if self.lbl_total_files and self.lbl_total_files.winfo_exists():
-            self.lbl_total_files.configure(text=f"{data.get('total_files', 0):,}".replace(',', '.'))
-        if self.lbl_total_size and self.lbl_total_size.winfo_exists():
-            self.lbl_total_size.configure(text=data.get('total_size_human', '0 B'))
+        if hasattr(self, 'recent_container') and self.recent_container.winfo_exists():
+            self._populate_recent_list(c)
 
     def _build_ui(self):
         c = lambda token: FluentTheme.c(token, self.theme_mode)
 
-        # 1. Başlık Alanı ve Sistem Durumu Rozeti
-        title_box = ctk.CTkFrame(self, fg_color="transparent")
-        title_box.pack(fill="x", padx=16, pady=(10, 12))
-
-        title_row = ctk.CTkFrame(title_box, fg_color="transparent")
-        title_row.pack(fill="x")
-
-        ctk.CTkLabel(
-            title_row,
-            text="Genel Bakış",
-            font=ctk.CTkFont(family=FluentTheme.FONTS['fallback'], size=24, weight="bold"),
-            text_color=c('text_primary')
-        ).pack(side="left")
-
-        # Sistem Durum Rozeti (Linux tarzı nefes alan canlı nabız)
-        lbl_sys_badge = ctk.CTkLabel(
-            title_row,
-            text="● Sistem Hazır & Aktif",
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color=c('success'),
-            fg_color=c('success_bg'),
-            corner_radius=10,
-            padx=10,
-            pady=3
-        )
-        lbl_sys_badge.pack(side="left", padx=(12, 0))
-        FluidAnimator.start_pulse_badge(lbl_sys_badge, color_base="#10B981", color_glow="#6EE7B7")
-
-        ctk.CTkLabel(
-            title_box,
-            text="Windows 11 Fluent Design & AI Dosya Zekâsı Yönetim Konsolu",
-            font=ctk.CTkFont(family=FluentTheme.FONTS['fallback'], size=13),
-            text_color=c('text_secondary')
-        ).pack(anchor="w", pady=(2, 0))
-
-        # 2. İstatistik Kartları (Grid)
-        stats_frame = ctk.CTkFrame(self, fg_color="transparent")
-        stats_frame.pack(fill="x", padx=16, pady=(0, 14))
-        stats_frame.grid_columnconfigure((0, 1, 2, 3), weight=1, uniform="stat_col")
-
-        target_folder = self.app.cfg.get('target', '')
-        cached_data = StorageAnalyzer._cache.get(target_folder)
-
-        initial_files = f"{cached_data['total_files']:,}".replace(',', '.') if cached_data else "Yükleniyor..."
-        initial_size = cached_data['total_size_human'] if cached_data else "Hesaplanıyor..."
-
-        # Kart 1: Toplam Dosya
-        card1 = ctk.CTkFrame(stats_frame, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border'))
-        card1.grid(row=0, column=0, padx=4, pady=4, sticky="nsew")
-        ctk.CTkLabel(card1, text="📁 Toplam Dosya", font=ctk.CTkFont(size=12, weight="bold"), text_color=c('text_secondary')).pack(anchor="w", padx=14, pady=(12, 2))
-        self.lbl_total_files = ctk.CTkLabel(card1, text=initial_files, font=ctk.CTkFont(size=22, weight="bold"), text_color=c('accent_light'))
-        self.lbl_total_files.pack(anchor="w", padx=14, pady=(0, 2))
-        ctk.CTkLabel(card1, text="Folders klasöründe", font=ctk.CTkFont(size=11), text_color=c('text_muted')).pack(anchor="w", padx=14, pady=(0, 12))
-
-        # Kart 2: Kaplanan Alan
-        card2 = ctk.CTkFrame(stats_frame, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border'))
-        card2.grid(row=0, column=1, padx=4, pady=4, sticky="nsew")
-        ctk.CTkLabel(card2, text="💾 Kaplanan Alan", font=ctk.CTkFont(size=12, weight="bold"), text_color=c('text_secondary')).pack(anchor="w", padx=14, pady=(12, 2))
-        self.lbl_total_size = ctk.CTkLabel(card2, text=initial_size, font=ctk.CTkFont(size=22, weight="bold"), text_color=c('accent_light'))
-        self.lbl_total_size.pack(anchor="w", padx=14, pady=(0, 2))
-        ctk.CTkLabel(card2, text="Disk kullanımı", font=ctk.CTkFont(size=11), text_color=c('text_muted')).pack(anchor="w", padx=14, pady=(0, 12))
-
-        # Kart 3: AI Doğruluğu
-        card3 = ctk.CTkFrame(stats_frame, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border'))
-        card3.grid(row=0, column=2, padx=4, pady=4, sticky="nsew")
-        ctk.CTkLabel(card3, text="🧠 AI Doğruluğu", font=ctk.CTkFont(size=12, weight="bold"), text_color=c('text_secondary')).pack(anchor="w", padx=14, pady=(12, 2))
-        ctk.CTkLabel(card3, text="%98.4", font=ctk.CTkFont(size=22, weight="bold"), text_color=c('success')).pack(anchor="w", padx=14, pady=(0, 2))
-        ctk.CTkLabel(card3, text="Çok boyutlu analiz", font=ctk.CTkFont(size=11), text_color=c('text_muted')).pack(anchor="w", padx=14, pady=(0, 12))
-
-        # Kart 4: İzlenen Konum
-        card4 = ctk.CTkFrame(stats_frame, fg_color=c('bg_card'), corner_radius=10, border_width=1, border_color=c('border'))
-        card4.grid(row=0, column=3, padx=4, pady=4, sticky="nsew")
-        ctk.CTkLabel(card4, text="👁️ İzlenen Konum", font=ctk.CTkFont(size=12, weight="bold"), text_color=c('text_secondary')).pack(anchor="w", padx=14, pady=(12, 2))
-        ctk.CTkLabel(card4, text=f"{len(self.app.cfg.get('sources', []))} Klasör", font=ctk.CTkFont(size=22, weight="bold"), text_color=c('accent_light')).pack(anchor="w", padx=14, pady=(0, 2))
-        ctk.CTkLabel(card4, text="Arka plan aktif", font=ctk.CTkFont(size=11), text_color=c('text_muted')).pack(anchor="w", padx=14, pady=(0, 12))
-
-        if not cached_data:
-            self.refresh_stats()
-
-        # 3. Windows 11 Hızlı Erişim Ribbon (Masaüstü, İndirilenler, Belgeler, Resimler, Müzikler, Videolar, Folders)
-        qa_card = ctk.CTkFrame(
+        # Kaydırılabilir Ana Konteyner (Solid Mica Arka Planı ile pürüzsüz kaydırma)
+        self.scroll = ctk.CTkScrollableFrame(
             self,
+            fg_color=c('bg_mica'),
+            scrollbar_button_color=c('border'),
+            scrollbar_button_hover_color=c('text_muted')
+        )
+        self.scroll.pack(fill="both", expand=True, padx=16, pady=(6, 10))
+        try:
+            self.scroll._parent_canvas.configure(yscrollincrement=4)
+        except Exception:
+            pass
+
+        # 1. Üst Karşılama & Özet Başlığı
+        header_frame = ctk.CTkFrame(self.scroll, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(4, 14))
+
+        title_lbl = ctk.CTkLabel(
+            header_frame,
+            text="Genel Bakış",
+            font=ctk.CTkFont(family="Segoe UI Variable Display", size=26, weight="bold"),
+            text_color=c('text_primary')
+        )
+        title_lbl.pack(anchor="w")
+
+        sub_lbl = ctk.CTkLabel(
+            header_frame,
+            text="AI Dosya Zekâsı Sistemi aktif ve klasörlerinizi gerçek zamanlı koruyor.",
+            font=ctk.CTkFont(family="Segoe UI", size=13),
+            text_color=c('text_secondary')
+        )
+        sub_lbl.pack(anchor="w", pady=(2, 0))
+
+        # 2. İstatistik Kartları (4'lü Fluent Grid)
+        stats_grid = ctk.CTkFrame(self.scroll, fg_color="transparent")
+        stats_grid.pack(fill="x", pady=(0, 18))
+        for i in range(4):
+            stats_grid.grid_columnconfigure(i, weight=1, uniform="stat")
+
+        target_base = self.app.cfg.get('target', '')
+        summary = self._get_activity_summary()
+        cached_storage = StorageAnalyzer._cache.get(target_base)
+
+        init_files = cached_storage.get('total_files', 0) if cached_storage else 0
+        init_size = cached_storage.get('total_size_human', 'Hesaplanıyor...') if cached_storage else "Hesaplanıyor..."
+        init_cats = len(cached_storage.get('categories', [])) if cached_storage else 0
+        init_today = summary.get('today', 0)
+
+        self.lbl_total_files = self._create_stat_card(stats_grid, 0, "📂", "Toplam Dosya", "0", "Folders içinde korunan", c)
+        self.lbl_total_size = self._create_stat_card(stats_grid, 1, "💾", "Toplam Boyut", init_size, "Optimize edilen alan", c)
+        self.lbl_categories = self._create_stat_card(stats_grid, 2, "🏷️", "Aktif Kategori", "0", "Akıllı sınıflandırma", c)
+        self.lbl_today_actions = self._create_stat_card(stats_grid, 3, "⚡", "Bugün Düzenlenen", "0", f"Toplam: {summary.get('total', 0)} işlem", c)
+
+        # Sayaçları akıcı şekilde hedef değerlere yükselt
+        FluidAnimator.animate_counter(self.lbl_total_files, 0, init_files, duration_ms=FluidAnimator.TIMING_COMPLEX)
+        FluidAnimator.animate_counter(self.lbl_categories, 0, init_cats, duration_ms=FluidAnimator.TIMING_COMPLEX)
+        FluidAnimator.animate_counter(self.lbl_today_actions, 0, init_today, duration_ms=FluidAnimator.TIMING_COMPLEX)
+        self._prev_files = init_files
+        self._prev_cats = init_cats
+        self._prev_today = init_today
+
+        # 3. Windows 11 Sabitlenen Klasörler (Hızlı Erişim Çipleri)
+        qa_card = ctk.CTkFrame(
+            self.scroll,
             fg_color=c('bg_card'),
-            corner_radius=10,
+            corner_radius=12,
             border_width=1,
             border_color=c('border')
         )
-        qa_card.pack(fill="x", padx=16, pady=(0, 14))
+        qa_card.pack(fill="x", pady=(0, 18))
+        FluidAnimator.bind_card_hover(qa_card, self.theme_mode)
 
         qa_inner = ctk.CTkFrame(qa_card, fg_color="transparent")
-        qa_inner.pack(fill="x", padx=14, pady=10)
-
-        qa_top = ctk.CTkFrame(qa_inner, fg_color="transparent")
-        qa_top.pack(fill="x", pady=(0, 6))
+        qa_inner.pack(fill="x", padx=18, pady=14)
 
         ctk.CTkLabel(
-            qa_top,
-            text="📌 Hızlı Erişim (Windows 11 Sabitlenen Klasörler)",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            qa_inner,
+            text="📌 Windows 11 Sabitlenen Klasörler (Uygulama İçi Görünüm)",
+            font=ctk.CTkFont(size=13, weight="bold"),
             text_color=c('text_primary')
-        ).pack(side="left")
+        ).pack(anchor="w", pady=(0, 8))
 
-        ctk.CTkLabel(
-            qa_top,
-            text="Klasörü Açmak İçin Tıklayın",
-            font=ctk.CTkFont(size=10),
-            text_color=c('text_muted')
-        ).pack(side="right")
+        chips_row = ctk.CTkFrame(qa_inner, fg_color="transparent")
+        chips_row.pack(fill="x")
 
-        qa_chips_box = ctk.CTkFrame(qa_inner, fg_color="transparent")
-        qa_chips_box.pack(fill="x")
-
-        user_home = os.environ.get('USERPROFILE', os.path.expanduser('~'))
-        quick_folders = [
-            ("🖥️ Masaüstü", os.path.join(user_home, "Desktop")),
-            ("📥 İndirilenler", os.path.join(user_home, "Downloads")),
-            ("📑 Belgeler", os.path.join(user_home, "Documents")),
-            ("🖼️ Resimler", os.path.join(user_home, "Pictures")),
-            ("🎵 Müzikler", os.path.join(user_home, "Music")),
-            ("🎬 Videolar", os.path.join(user_home, "Videos")),
-            ("📂 Folders", self.app.cfg.get('target', ''))
+        pinned_nav = [
+            ("🖥️ Masaüstü 📌", 'qf_desktop'),
+            ("📥 İndirilenler 📌", 'qf_downloads'),
+            ("📑 Belgeler 📌", 'qf_documents'),
+            ("🖼️ Resimler 📌", 'qf_pictures'),
+            ("🎵 Müzikler 📌", 'qf_music'),
+            ("🎬 Videolar 📌", 'qf_videos'),
+            ("📁 Folders Ana Klasör", 'files')
         ]
-
-        for label_text, target_path in quick_folders:
-            btn_chip = ctk.CTkButton(
-                qa_chips_box,
-                text=f"{label_text} 📌",
-                font=ctk.CTkFont(size=11),
+        for label_txt, nav_id in pinned_nav:
+            ctk.CTkButton(
+                chips_row,
+                text=label_txt,
+                font=ctk.CTkFont(size=11, weight="bold"),
                 fg_color=c('quick_access_bg'),
                 hover_color=c('quick_access_hover'),
                 text_color=c('text_primary'),
                 border_width=1,
                 border_color=c('border_subtle'),
-                height=30,
-                corner_radius=6,
-                command=lambda p=target_path: os.startfile(p) if os.path.exists(p) else None
-            )
-            btn_chip.pack(side="left", padx=(0, 6), pady=2)
+                height=32,
+                corner_radius=7,
+                command=lambda nid=nav_id: self.app.navigate_to(nid)
+            ).pack(side="left", padx=(0, 6), pady=2)
 
-        # 4. Sürükle - Bırak Kartı (Drag & Drop Zone)
-        drop_card = ctk.CTkFrame(
-            self,
+        # 4. Sürükle & Bırak Akıllı Alanı (Quick Drop Zone) + Hızlı Eylemler
+        mid_frame = ctk.CTkFrame(self.scroll, fg_color="transparent")
+        mid_frame.pack(fill="x", pady=(0, 18))
+        mid_frame.grid_columnconfigure(0, weight=3)
+        mid_frame.grid_columnconfigure(1, weight=2)
+
+        # Sol: Sürükle-Bırak Kartı
+        self.drop_card = ctk.CTkFrame(
+            mid_frame,
+            fg_color=c('bg_card'),
+            corner_radius=12,
+            border_width=2,
+            border_color=c('accent')
+        )
+        self.drop_card.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        FluidAnimator.bind_card_hover(
+            self.drop_card,
+            self.theme_mode,
+            normal_border_token='accent',
+            hover_border_token='accent_light'
+        )
+
+        drop_inner = ctk.CTkFrame(self.drop_card, fg_color="transparent")
+        drop_inner.pack(expand=True, fill="both", padx=24, pady=24)
+
+        ctk.CTkLabel(
+            drop_inner,
+            text="📥 Dosyaları Buraya Sürükleyin ve Bırakın",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=c('accent_light')
+        ).pack(pady=(6, 4))
+
+        ctk.CTkLabel(
+            drop_inner,
+            text="Pencerenin herhangi bir yerine bıraktığınız dosya ve klasörler\nAI File Intelligence motoru tarafından analiz edilerek ilgili kategoriye taşınır.",
+            font=ctk.CTkFont(size=12),
+            text_color=c('text_secondary'),
+            justify="center"
+        ).pack(pady=(0, 14))
+
+        btn_row = ctk.CTkFrame(drop_inner, fg_color="transparent")
+        btn_row.pack()
+
+        ctk.CTkButton(
+            btn_row,
+            text="⚡ Şimdi Tüm Klasörleri Tara",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color=c('accent'),
+            hover_color=c('accent_hover'),
+            corner_radius=8,
+            height=36,
+            command=self.app.trigger_manual_scan
+        ).pack(side="left", padx=6)
+
+        ctk.CTkButton(
+            btn_row,
+            text="📂 Folders Klasörünü Aç",
+            font=ctk.CTkFont(size=13),
+            fg_color=c('bg_card_secondary'),
+            hover_color=c('bg_card_hover'),
+            text_color=c('text_primary'),
+            border_width=1,
+            border_color=c('border'),
+            corner_radius=8,
+            height=36,
+            command=self.app.open_target_folder
+        ).pack(side="left", padx=6)
+
+        # Sağ: Hızlı Araçlar Kartı
+        quick_card = ctk.CTkFrame(
+            mid_frame,
             fg_color=c('bg_card'),
             corner_radius=12,
             border_width=1,
-            border_color=c('accent')
-        )
-        drop_card.pack(fill="x", padx=16, pady=(0, 14))
-
-        inner_drop = ctk.CTkFrame(drop_card, fg_color="transparent")
-        inner_drop.pack(fill="x", padx=18, pady=14)
-
-        icon_frame = ctk.CTkFrame(inner_drop, fg_color=c('accent_bg'), width=48, height=48, corner_radius=10)
-        icon_frame.pack(side="left", padx=(0, 14))
-        icon_frame.pack_propagate(False)
-
-        ctk.CTkLabel(
-            icon_frame,
-            text="📥",
-            font=ctk.CTkFont(size=24)
-        ).place(relx=0.5, rely=0.5, anchor="center")
-
-        text_box = ctk.CTkFrame(inner_drop, fg_color="transparent")
-        text_box.pack(side="left", fill="both", expand=True)
-
-        ctk.CTkLabel(
-            text_box,
-            text="Dosyaları veya Klasörleri Buraya Sürükleyip Bırakın",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color=c('text_primary')
-        ).pack(anchor="w")
-
-        ctk.CTkLabel(
-            text_box,
-            text="AI motoru içerik, dosya türü ve metadata analizini otomatik yaparak Folders klasörüne organize eder.",
-            font=ctk.CTkFont(size=11),
-            text_color=c('text_secondary')
-        ).pack(anchor="w", pady=(2, 0))
-
-        btn_box = ctk.CTkFrame(inner_drop, fg_color="transparent")
-        btn_box.pack(side="right")
-
-        ctk.CTkButton(
-            btn_box,
-            text="📄 Dosya Seç",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color=c('accent'),
-            hover_color=c('accent_hover'),
-            height=32,
-            corner_radius=6,
-            command=self._pick_files
-        ).pack(side="left", padx=4)
-
-        ctk.CTkButton(
-            btn_box,
-            text="📁 Klasör Seç",
-            font=ctk.CTkFont(size=12),
-            fg_color=c('bg_card_hover'),
-            hover_color=c('bg_card_active'),
-            text_color=c('text_primary'),
-            height=32,
-            corner_radius=6,
-            command=self._pick_folder
-        ).pack(side="left", padx=4)
-
-        # 5. Hızlı Eylemler & Son İşlemler (2 Kolon)
-        bottom_frame = ctk.CTkFrame(self, fg_color="transparent")
-        bottom_frame.pack(fill="both", expand=True, padx=16, pady=(0, 10))
-        bottom_frame.grid_columnconfigure((0, 1), weight=1, uniform="bottom_cols")
-
-        # Sol: Hızlı Aksiyonlar
-        quick_card = ctk.CTkFrame(
-            bottom_frame,
-            fg_color=c('bg_card'),
-            corner_radius=10,
-            border_width=1,
             border_color=c('border')
         )
-        quick_card.grid(row=0, column=0, padx=(0, 8), sticky="nsew")
+        quick_card.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        FluidAnimator.bind_card_hover(quick_card, self.theme_mode)
+
+        q_inner = ctk.CTkFrame(quick_card, fg_color="transparent")
+        q_inner.pack(fill="both", expand=True, padx=18, pady=16)
 
         ctk.CTkLabel(
-            quick_card,
-            text="⚡ Hızlı İşlemler",
-            font=ctk.CTkFont(size=14, weight="bold"),
+            q_inner,
+            text="Hızlı Zekâ Araçları",
+            font=ctk.CTkFont(size=15, weight="bold"),
             text_color=c('text_primary')
-        ).pack(anchor="w", padx=16, pady=(12, 10))
+        ).pack(anchor="w", pady=(0, 10))
 
-        actions = [
-            ("⚡ Giriş Klasörlerini Şimdi Tara", self.app.manual_organize, c('accent')),
-            ("📂 Folders Ana Klasörünü Aç", self.app.open_target_folder, c('bg_card_hover')),
-            ("📑 Mükerrer Kopya Dosyaları Bul", lambda: self.app.navigate_to('duplicates'), c('bg_card_hover')),
-            ("📊 Depolama Analizini Görüntüle", lambda: self.app.navigate_to('storage'), c('bg_card_hover')),
-            ("↩️ En Son İşlemi Geri Al (Undo)", self.app.undo_last_action, c('danger_bg'))
-        ]
+        self._create_quick_btn(q_inner, "🔍 Akıllı Anlamsal Arama", lambda: self.app.navigate_to('search'), c)
+        self._create_quick_btn(q_inner, "📑 Kopya Dosyaları Temizle", lambda: self.app.navigate_to('duplicates'), c)
+        self._create_quick_btn(q_inner, "📊 Depolama Dağılımını Gör", lambda: self.app.navigate_to('storage'), c)
+        self._create_quick_btn(q_inner, "↩️ Son İşlemleri Geri Al (Undo)", lambda: self.app.navigate_to('security'), c)
 
-        for text, cmd, bg in actions:
-            btn = ctk.CTkButton(
-                quick_card,
-                text=text,
-                font=ctk.CTkFont(size=12),
-                fg_color=bg,
-                hover_color=c('bg_card_active'),
-                text_color=c('text_primary'),
-                anchor="w",
-                height=32,
-                corner_radius=6,
-                command=cmd
-            )
-            btn.pack(fill="x", padx=16, pady=4)
-
-        # Sağ: Son Aktiviteler
+        # 5. Son Organizasyon Hareketleri
         recent_card = ctk.CTkFrame(
-            bottom_frame,
+            self.scroll,
             fg_color=c('bg_card'),
-            corner_radius=10,
+            corner_radius=12,
             border_width=1,
             border_color=c('border')
         )
-        recent_card.grid(row=0, column=1, padx=(8, 0), sticky="nsew")
+        recent_card.pack(fill="x", pady=(0, 10))
 
-        recent_header = ctk.CTkFrame(recent_card, fg_color="transparent")
-        recent_header.pack(fill="x", padx=16, pady=(12, 8))
+        r_header = ctk.CTkFrame(recent_card, fg_color="transparent")
+        r_header.pack(fill="x", padx=18, pady=(14, 8))
 
         ctk.CTkLabel(
-            recent_header,
-            text="🕒 Son İşlemler",
-            font=ctk.CTkFont(size=14, weight="bold"),
+            r_header,
+            text="Son Düzenlenen Dosyalar",
+            font=ctk.CTkFont(size=15, weight="bold"),
             text_color=c('text_primary')
         ).pack(side="left")
 
         ctk.CTkButton(
-            recent_header,
+            r_header,
             text="Tümünü Gör →",
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(size=12),
             fg_color="transparent",
             hover_color=c('bg_card_hover'),
             text_color=c('accent_light'),
-            width=80,
-            height=24,
+            width=90,
+            height=28,
             command=lambda: self.app.navigate_to('activity')
         ).pack(side="right")
 
-        # Son 5 işlem kaydı
-        history = SecurityBackupEngine.get_history(limit=5)
-        if not history:
-            ctk.CTkLabel(
-                recent_card,
-                text="Henüz kaydedilmiş bir dosya işlemi yok.\nDosyalarınızı sürükleyip bırakarak başlayabilirsiniz.",
-                font=ctk.CTkFont(size=12),
-                text_color=c('text_muted'),
-                justify="center"
-            ).pack(expand=True, pady=20)
-        else:
-            for tx in history:
-                row = ctk.CTkFrame(recent_card, fg_color=c('bg_mica'), corner_radius=6)
-                row.pack(fill="x", padx=12, pady=3)
+        self.recent_container = ctk.CTkFrame(recent_card, fg_color="transparent")
+        self.recent_container.pack(fill="x", padx=18, pady=(0, 14))
 
-                inner_row = ctk.CTkFrame(row, fg_color="transparent")
-                inner_row.pack(fill="x", padx=10, pady=6)
+        self._populate_recent_list(c)
 
-                icon = "↩️" if tx.get('status') == 'undone' else "📄"
-                ctk.CTkLabel(
-                    inner_row,
-                    text=icon,
-                    font=ctk.CTkFont(size=14)
-                ).pack(side="left", padx=(0, 8))
+        # Arka planda istatistikleri hesapla (UI kilitlenmesini önler)
+        if not cached_storage and not self._is_loading_stats:
+            self._is_loading_stats = True
+            threading.Thread(target=self._async_load_stats, args=(target_base,), daemon=True).start()
 
-                name_lbl = ctk.CTkLabel(
-                    inner_row,
-                    text=tx.get('file_name', ''),
-                    font=ctk.CTkFont(size=12, weight="bold"),
-                    text_color=c('text_primary'),
-                    anchor="w"
+    def _async_load_stats(self, target_base):
+        try:
+            data = StorageAnalyzer.analyze_folder(target_base)
+            UIBridge.post(lambda: self._apply_storage_stats(data))
+        except Exception:
+            pass
+        finally:
+            self._is_loading_stats = False
+
+    def _apply_storage_stats(self, data):
+        try:
+            new_files = data.get('total_files', 0)
+            new_cats = len(data.get('categories', []))
+            if hasattr(self, 'lbl_total_files') and self.lbl_total_files.winfo_exists():
+                FluidAnimator.animate_counter(
+                    self.lbl_total_files,
+                    self._prev_files,
+                    new_files,
+                    duration_ms=FluidAnimator.TIMING_COMPLEX
                 )
-                name_lbl.pack(side="left", fill="x", expand=True)
+                self._prev_files = new_files
+            if hasattr(self, 'lbl_total_size') and self.lbl_total_size.winfo_exists():
+                self.lbl_total_size.configure(text=data.get('total_size_human', '0 B'))
+            if hasattr(self, 'lbl_categories') and self.lbl_categories.winfo_exists():
+                FluidAnimator.animate_counter(
+                    self.lbl_categories,
+                    self._prev_cats,
+                    new_cats,
+                    duration_ms=FluidAnimator.TIMING_COMPLEX
+                )
+                self._prev_cats = new_cats
+        except Exception:
+            pass
 
-                ctk.CTkLabel(
-                    inner_row,
-                    text=tx.get('category', ''),
-                    font=ctk.CTkFont(size=11),
-                    text_color=c('accent_light')
-                ).pack(side="right", padx=(8, 0))
+    def _create_stat_card(self, parent, col, icon, title, value, subtitle, c):
+        card = ctk.CTkFrame(
+            parent,
+            fg_color=c('bg_card'),
+            corner_radius=12,
+            border_width=1,
+            border_color=c('border')
+        )
+        card.grid(row=0, column=col, sticky="nsew", padx=5)
+        FluidAnimator.bind_card_hover(card, self.theme_mode)
 
-    def _pick_files(self):
-        paths = filedialog.askopenfilenames(title="Düzenlenecek Dosyaları Seçin")
-        if paths:
-            self.app.on_files_dropped(list(paths))
+        inner = ctk.CTkFrame(card, fg_color="transparent")
+        inner.pack(fill="both", expand=True, padx=16, pady=14)
 
-    def _pick_folder(self):
-        p = filedialog.askdirectory(title="Düzenlenecek Klasörü Seçin")
-        if p:
-            self.app.on_files_dropped([p])
+        top = ctk.CTkFrame(inner, fg_color="transparent")
+        top.pack(fill="x")
+
+        ctk.CTkLabel(
+            top,
+            text=icon,
+            font=ctk.CTkFont(size=20)
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            top,
+            text=title,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=c('text_secondary')
+        ).pack(side="left", padx=8)
+
+        val_lbl = ctk.CTkLabel(
+            inner,
+            text=value,
+            font=ctk.CTkFont(size=22, weight="bold"),
+            text_color=c('text_primary')
+        )
+        val_lbl.pack(anchor="w", pady=(8, 2))
+
+        ctk.CTkLabel(
+            inner,
+            text=subtitle,
+            font=ctk.CTkFont(size=11),
+            text_color=c('text_muted')
+        ).pack(anchor="w")
+        return val_lbl
+
+    def _create_quick_btn(self, parent, text, cmd, c):
+        btn = ctk.CTkButton(
+            parent,
+            text=text,
+            anchor="w",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=c('bg_card_secondary'),
+            hover_color=c('bg_card_hover'),
+            text_color=c('text_primary'),
+            height=34,
+            corner_radius=8,
+            command=cmd
+        )
+        btn.pack(fill="x", pady=3)
+
+    def _populate_recent_list(self, c):
+        for w in self.recent_container.winfo_children():
+            w.destroy()
+
+        logs = SecurityBackupEngine.get_history(limit=6, active_only=True)
+        if not logs:
+            ctk.CTkLabel(
+                self.recent_container,
+                text="Henüz kaydedilmiş bir dosya organizasyon işlemi bulunmuyor.",
+                font=ctk.CTkFont(size=12),
+                text_color=c('text_muted')
+            ).pack(pady=14)
+            return
+
+        for entry in logs:
+            row = ctk.CTkFrame(
+                self.recent_container,
+                fg_color=c('bg_card_secondary'),
+                corner_radius=8,
+                border_width=1,
+                border_color=c('border_subtle')
+            )
+            row.pack(fill="x", pady=3)
+            FluidAnimator.bind_card_hover(
+                row,
+                self.theme_mode,
+                normal_bg_token='bg_card_secondary',
+                hover_bg_token='bg_card_hover',
+                normal_border_token='border_subtle',
+                hover_border_token='border_hover'
+            )
+
+            ctk.CTkLabel(
+                row,
+                text="📄 " + entry.get('file_name', 'Bilinmeyen'),
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=c('text_primary')
+            ).pack(side="left", padx=12, pady=8)
+
+            ctk.CTkLabel(
+                row,
+                text=f"➔  {entry.get('category', '')} / {entry.get('subcategory', '')}",
+                font=ctk.CTkFont(size=12),
+                text_color=c('accent_light')
+            ).pack(side="left", padx=8)
+
+            conf = int(float(entry.get('confidence', 0.9)) * 100)
+            ctk.CTkLabel(
+                row,
+                text=f"AI %{conf}  •  {entry.get('timestamp', '')}",
+                font=ctk.CTkFont(size=11),
+                text_color=c('text_muted')
+            ).pack(side="right", padx=12)
